@@ -146,10 +146,75 @@ static int asfrtp_parse_sdp_line(AVFormatContext *s, int stream_index,
     return 0;
 }
 
+static int wmtrtp_parse_sdp_line(AVFormatContext *s, int stream_index,
+                                 PayloadContext *asf, const char *line)
+{
+    RTSPState *rt = s->priv_data;
+
+    if (av_strstart(line, "RawHeader:buffer;\"", &line)){
+        ByteIOContext pb;
+        int i, ret, len = strlen(line) * 6 / 8;
+        char *buf = av_mallocz(len);
+
+        len = av_base64_decode(buf, line, len);
+        if (rtp_asf_fix_header(buf+8, len-8) < 0)
+            av_log(s, AV_LOG_ERROR,
+                   "Failed to fix invalid RTSP-MS/ASF min_pktsize\n");
+        init_packetizer(&pb, buf+8, len-8);
+        if (rt->asf_ctx) {
+            av_close_input_stream(rt->asf_ctx);
+            rt->asf_ctx = NULL;
+        }
+        ret = av_open_input_stream(&rt->asf_ctx, &pb, "", &ff_asf_demuxer, NULL);
+        if (ret < 0)
+            return ret;
+        rt->asf_pb_pos = url_ftell(&pb);
+        av_free(buf);
+        rt->asf_ctx->pb = NULL;
+
+        for (i = 0; i < rt->asf_ctx->nb_streams; i++){
+            AVStream *st = av_new_stream(s, 0);
+            AVCodecContext *ctx = st->codec;
+            *st = *rt->asf_ctx->streams[i];
+            st->codec = ctx;
+            *st->codec = *rt->asf_ctx->streams[i]->codec;
+            rt->asf_ctx->streams[i]->codec->extradata_size = 0;
+            rt->asf_ctx->streams[i]->codec->extradata = NULL;
+            st->priv_data = s->streams[stream_index]->priv_data;
+        }
+    }
+
+    return 0;
+}
+
 struct PayloadContext {
     ByteIOContext *pktbuf, pb;
     uint8_t *buf;
 };
+
+static int get_packet_data(AVFormatContext *s, PayloadContext *asf,
+                           AVPacket *pkt)
+{
+    ByteIOContext *pb = &asf->pb;
+    int res, i;
+    RTSPState *rt = s->priv_data;
+
+    for (;;) {
+        res = av_read_packet(rt->asf_ctx, pkt);
+        rt->asf_pb_pos = url_ftell(pb);
+        if (res != 0)
+            break;
+        for (i = 0; i < s->nb_streams; i++) {
+            if (s->streams[i]->id == rt->asf_ctx->streams[pkt->stream_index]->id) {
+                pkt->stream_index = i;
+                return 1; // FIXME: return 0 if last packet
+            }
+        }
+        av_free_packet(pkt);
+    }
+
+    return res == 1 ? -1 : res;
+}
 
 /**
  * @return 0 when a packet was written into /p pkt, and no more data is left;
@@ -243,23 +308,36 @@ static int asfrtp_parse_packet(AVFormatContext *s, PayloadContext *asf,
         rt->asf_ctx->pb = pb;
     }
 
-    for (;;) {
-        int i;
+    return get_packet_data(s, asf, pkt);
+}
 
-        res = av_read_packet(rt->asf_ctx, pkt);
-        rt->asf_pb_pos = url_ftell(pb);
-        if (res != 0)
-            break;
-        for (i = 0; i < s->nb_streams; i++) {
-            if (s->streams[i]->id == rt->asf_ctx->streams[pkt->stream_index]->id) {
-                pkt->stream_index = i;
-                return 1; // FIXME: return 0 if last packet
-            }
-        }
-        av_free_packet(pkt);
+/**
+ * @return 0 when a packet was written into /p pkt, and no more data is left;
+ *         1 when a packet was written into /p pkt, and more packets might be left;
+ *        <0 when not enough data was provided to return a full packet, or on error.
+ */
+static int wmtrtp_parse_packet(AVFormatContext *s, PayloadContext *asf,
+                               AVStream *st, AVPacket *pkt,
+                               uint32_t *timestamp,
+                               const uint8_t *buf, int len, int flags)
+{
+    ByteIOContext *pb = &asf->pb;
+    RTSPState *rt = s->priv_data;
+
+    if (!rt->asf_ctx)
+        return -1;
+
+    if (len > 0) {
+        av_free(asf->buf);
+        asf->buf = av_malloc(len-8);
+        memcpy(asf->buf, buf+8, len-8);
+        init_packetizer(pb, asf->buf, len-8);
+        pb->pos += rt->asf_pb_pos;
+        pb->eof_reached = 0;
+        rt->asf_ctx->pb = pb;
     }
 
-    return res == 1 ? -1 : res;
+    return get_packet_data(s, asf, pkt);
 }
 
 static PayloadContext *asfrtp_new_context(void)
@@ -292,3 +370,13 @@ RTPDynamicProtocolHandler ff_ms_rtp_ ## n ## _handler = { \
 
 RTP_ASF_HANDLER(asf_pfv, "x-asf-pf",  AVMEDIA_TYPE_VIDEO);
 RTP_ASF_HANDLER(asf_pfa, "x-asf-pf",  AVMEDIA_TYPE_AUDIO);
+
+RTPDynamicProtocolHandler ff_ms_rtp_asf_wmt_handler = {
+    .enc_name         = "x-pn-wmt",
+    .codec_type       = AVMEDIA_TYPE_DATA,
+    .codec_id         = CODEC_ID_NONE,
+    .parse_sdp_a_line = wmtrtp_parse_sdp_line,
+    .open             = asfrtp_new_context,
+    .close            = asfrtp_free_context,
+    .parse_packet     = wmtrtp_parse_packet,
+};

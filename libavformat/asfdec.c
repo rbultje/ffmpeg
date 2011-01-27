@@ -807,6 +807,7 @@ static int ff_asf_parse_packet(AVFormatContext *s, ByteIOContext *pb, AVPacket *
             assert(ret>=0);
             /* fail safe */
             url_fskip(pb, ret);
+            asf->packet_size_left = asf->packet_padsize = 0; // HACK for x-pn-wmt
 
             asf->packet_pos= url_ftell(pb);
             if (asf->data_object_size != (uint64_t)-1 &&

@@ -283,7 +283,9 @@ retry:
             for (i = 0; i < rt->nb_rtsp_streams; i++) {
                 rule_nr = 0;
                 for (r = 0; r < s->nb_streams; r++) {
-                    if (s->streams[r]->priv_data == rt->rtsp_streams[i]) {
+                    if (s->streams[r]->priv_data == rt->rtsp_streams[i] &&
+                        s->streams[r]->codec->codec_type != CODEC_TYPE_DATA &&
+                        s->streams[r]->codec->channels > 0) { // HACK for x-pn-wmt
                         if (s->streams[r]->discard != AVDISCARD_ALL) {
                             if (!first)
                                 av_strlcat(rt->last_subscription, ",",
