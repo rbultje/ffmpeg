@@ -47,6 +47,16 @@ typedef struct {
     int remaining_len;
     int audio_stream_num; ///< Stream number for audio packets
     int audio_pkt_cnt; ///< Output packet counter
+
+    /* only valid for multirate files, unused otherwise */
+    struct {
+        int64_t last_pts;    ///< timestamp of last RM packet
+        uint64_t cur_offset; ///< file offset of data in next RM packet
+        uint64_t start_off;  ///< offset of first packet in this data chunk
+        unsigned int size;   ///< size of the data chunk
+    } data_chunks[MAX_STREAMS];
+    int n_data_chunks;       ///< number of data chunks, >1 for multirate files
+    int cur_data_chunk;      ///< index of data chunk of last packet
 } RMDemuxContext;
 
 static const unsigned char sipr_swaps[38][2] = {
@@ -390,7 +400,7 @@ static int rm_read_header(AVFormatContext *s, AVFormatParameters *ap)
     ByteIOContext *pb = s->pb;
     unsigned int tag;
     int tag_size;
-    unsigned int start_time, duration;
+    unsigned int start_time, duration, next_data_header;
     unsigned int data_off = 0, indx_off = 0;
     char buf[128];
     int flags = 0;
@@ -477,7 +487,21 @@ static int rm_read_header(AVFormatContext *s, AVFormatParameters *ap)
     rm->nb_packets = get_be32(pb); /* number of packets */
     if (!rm->nb_packets && (flags & 4))
         rm->nb_packets = 3600 * 25;
-    get_be32(pb); /* next data header */
+    do {
+        rm->data_chunks[rm->n_data_chunks].size = FFMAX(0, tag_size - 18);
+        next_data_header = get_be32(pb);
+        rm->data_chunks[rm->n_data_chunks].start_off =
+            rm->data_chunks[rm->n_data_chunks].cur_offset = url_ftell(pb);
+        rm->n_data_chunks++;
+        if (!next_data_header ||
+            url_fseek(pb, next_data_header, SEEK_SET) < 0 ||
+            get_le32(pb) != MKTAG('D','A','T','A'))
+            break;
+        tag_size = get_be32(pb);
+        url_fskip(pb, 6); // flags, n_packets
+    } while (rm->n_data_chunks < MAX_STREAMS);
+    if (rm->n_data_chunks > 1)
+        url_fseek(pb, rm->data_chunks[0].start_off, SEEK_SET);
 
     if (!data_off)
         data_off = url_ftell(pb) - 18;
@@ -524,6 +548,23 @@ static int sync(AVFormatContext *s, int64_t *timestamp, int *flags, int *stream_
             *timestamp = AV_NOPTS_VALUE;
             *flags= 0;
         }else{
+            int cnt, cur_chunk = -1;
+
+            for (cnt = 0; cnt < rm->n_data_chunks; cnt++)
+                if ((cur_chunk == -1 ||
+                     rm->data_chunks[cnt].last_pts <
+                         rm->data_chunks[cur_chunk].last_pts) &&
+                    !(rm->data_chunks[cnt].size > 0 &&
+                      rm->data_chunks[cnt].cur_offset >=
+                          rm->data_chunks[cnt].start_off +
+                          rm->data_chunks[cnt].size))
+                    cur_chunk = cnt;
+            if (cur_chunk == -1) return -1; //EOF
+            if (cur_chunk != rm->cur_data_chunk) {
+                url_fseek(pb, rm->data_chunks[cur_chunk].cur_offset, SEEK_SET);
+                rm->cur_data_chunk = cur_chunk;
+            }
+
             state= (state<<8) + get_byte(pb);
 
             if(state == MKBETAG('I', 'N', 'D', 'X')){
@@ -548,15 +589,23 @@ static int sync(AVFormatContext *s, int64_t *timestamp, int *flags, int *stream_
                        "DATA tag in middle of chunk, file may be broken.\n");
             }
 
-            if(state > (unsigned)0xFFFF || state <= 12)
+            if(state > 0x1FFFF+12 || state <= 12)
                 continue;
-            len=state - 12;
-            state= 0xFFFFFFFF;
+            len=(state - 12)&0xFFFF;
 
             num = get_be16(pb);
             *timestamp = get_be32(pb);
             get_byte(pb); /* reserved */
             *flags = get_byte(pb); /* flags */
+
+             if (state >> 16 == 1) {
+                 url_fskip(pb, 1);
+                 len--;
+             }
+ 
+             state= 0xFFFFFFFF;
+             rm->data_chunks[cur_chunk].last_pts = *timestamp;
+             rm->data_chunks[cur_chunk].cur_offset = url_ftell(pb)+len;
         }
         for(i=0;i<s->nb_streams;i++) {
             st = s->streams[i];
