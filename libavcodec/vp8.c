@@ -1070,6 +1070,7 @@ void vp8_mc_luma(VP8Context *s, uint8_t *dst, AVFrame *ref, const VP56mv *mv,
 
         int mx = (mv->x << 1)&7, mx_idx = subpel_idx[0][mx];
         int my = (mv->y << 1)&7, my_idx = subpel_idx[0][my];
+        int edge = (s->avctx->flags & CODEC_FLAG_EMU_EDGE) ? 0 : 16;
 
         x_off += mv->x >> 2;
         y_off += mv->y >> 2;
@@ -1077,8 +1078,8 @@ void vp8_mc_luma(VP8Context *s, uint8_t *dst, AVFrame *ref, const VP56mv *mv,
         // edge emulation
         ff_thread_await_progress(ref, (3 + y_off + block_h + subpel_idx[2][my]) >> 4, 0);
         src += y_off * linesize + x_off;
-        if (x_off < mx_idx || x_off >= width  - block_w - subpel_idx[2][mx] ||
-            y_off < my_idx || y_off >= height - block_h - subpel_idx[2][my]) {
+        if (x_off + edge < mx_idx || x_off >= edge + width  - block_w - subpel_idx[2][mx] ||
+            y_off + edge < my_idx || y_off >= edge + height - block_h - subpel_idx[2][my]) {
             s->dsp.emulated_edge_mc(s->edge_emu_buffer, src - my_idx * linesize - mx_idx, linesize,
                                     block_w + subpel_idx[1][mx], block_h + subpel_idx[1][my],
                                     x_off - mx_idx, y_off - my_idx, width, height);
@@ -1119,6 +1120,7 @@ void vp8_mc_chroma(VP8Context *s, uint8_t *dst1, uint8_t *dst2, AVFrame *ref,
     if (AV_RN32A(mv)) {
         int mx = mv->x&7, mx_idx = subpel_idx[0][mx];
         int my = mv->y&7, my_idx = subpel_idx[0][my];
+        int edge = (s->avctx->flags & CODEC_FLAG_EMU_EDGE) ? 0 : 8;
 
         x_off += mv->x >> 3;
         y_off += mv->y >> 3;
@@ -1127,8 +1129,8 @@ void vp8_mc_chroma(VP8Context *s, uint8_t *dst1, uint8_t *dst2, AVFrame *ref,
         src1 += y_off * linesize + x_off;
         src2 += y_off * linesize + x_off;
         ff_thread_await_progress(ref, (3 + y_off + block_h + subpel_idx[2][my]) >> 3, 0);
-        if (x_off < mx_idx || x_off >= width  - block_w - subpel_idx[2][mx] ||
-            y_off < my_idx || y_off >= height - block_h - subpel_idx[2][my]) {
+        if (x_off + edge < mx_idx || x_off >= edge + width  - block_w - subpel_idx[2][mx] ||
+            y_off + edge < my_idx || y_off >= edge + height - block_h - subpel_idx[2][my]) {
             s->dsp.emulated_edge_mc(s->edge_emu_buffer, src1 - my_idx * linesize - mx_idx, linesize,
                                     block_w + subpel_idx[1][mx], block_h + subpel_idx[1][my],
                                     x_off - mx_idx, y_off - my_idx, width, height);
@@ -1620,8 +1622,9 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             curframe->data[0] + 16*mb_y*s->linesize,
             curframe->data[1] +  8*mb_y*s->uvlinesize,
             curframe->data[2] +  8*mb_y*s->uvlinesize
-        };
+        }, *origdst[3];
 
+        origdst[0] = dst[0]; origdst[1] = dst[1]; origdst[2] = dst[2];
         memset(mb - 1, 0, sizeof(*mb));   // zero left macroblock
         memset(s->left_nnz, 0, sizeof(s->left_nnz));
         AV_WN32A(s->intra4x4_pred_mode_left, DC_PRED*0x01010101);
@@ -1692,6 +1695,28 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         }
         s->mv_min.y -= 64;
         s->mv_max.y -= 64;
+
+        if (referenced && !(avctx->flags & CODEC_FLAG_EMU_EDGE)) {
+            int flags = 0, h = 12, uvh = 4;
+            if (mb_y == 0) {
+                flags |= EDGE_TOP;
+            } else {
+                origdst[0] -= 4 * s->linesize;
+                origdst[1] -= 4 * s->uvlinesize;
+                origdst[2] -= 4 * s->uvlinesize;
+                h += 4; uvh += 4;
+            }
+            if (mb_y == s->mb_height - 1) {
+                flags |= EDGE_BOTTOM;
+                h += 4; uvh += 4;
+            }
+            s->dsp.draw_edges(origdst[0], s->linesize,
+                              s->mb_width << 4, h,  16, flags);
+            s->dsp.draw_edges(origdst[1], s->uvlinesize,
+                              s->mb_width << 3, uvh, 8, flags);
+            s->dsp.draw_edges(origdst[2], s->uvlinesize,
+                              s->mb_width << 3, uvh, 8, flags);
+        }
 
         ff_thread_report_progress(curframe, mb_y, 0);
     }
