@@ -113,6 +113,16 @@ static void FUNCC(draw_edges)(uint8_t *_buf, int _wrap, int width, int height, i
             memcpy(last_line + (i + 1) * wrap, last_line, (width + w + w) * sizeof(pixel)); // bottom
 }
 
+static void FUNCC(draw_edges_8)(uint8_t *buf, int stride, int width, int height, int flags)
+{
+    FUNCC(draw_edges)(buf, stride, width, height, 8, 8, flags);
+}
+
+static void FUNCC(draw_edges_16)(uint8_t *buf, int stride, int width, int height, int flags)
+{
+    FUNCC(draw_edges)(buf, stride, width, height, 16, 16, flags);
+}
+
 /**
  * Copy a rectangular area of samples to a temporary buffer and replicate the border samples.
  * @param buf destination buffer

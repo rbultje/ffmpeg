@@ -3038,6 +3038,8 @@ av_cold void dsputil_init(DSPContext* c, AVCodecContext *avctx)
 #define BIT_DEPTH_FUNCS(depth, dct)\
     c->get_pixels                    = FUNCC(get_pixels   ## dct   , depth);\
     c->draw_edges                    = FUNCC(draw_edges            , depth);\
+    c->draw_edges2[0]                = FUNCC(draw_edges_16         , depth);\
+    c->draw_edges2[1]                = FUNCC(draw_edges_8          , depth);\
     c->emulated_edge_mc              = FUNC (ff_emulated_edge_mc   , depth);\
     c->clear_block                   = FUNCC(clear_block  ## dct   , depth);\
     c->clear_blocks                  = FUNCC(clear_blocks ## dct   , depth);\

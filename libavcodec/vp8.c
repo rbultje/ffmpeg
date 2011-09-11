@@ -1710,12 +1710,12 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                 flags |= EDGE_BOTTOM;
                 h += 4; uvh += 4;
             }
-            s->dsp.draw_edges(origdst[0], s->linesize,
-                              s->mb_width << 4, h,  16, flags);
-            s->dsp.draw_edges(origdst[1], s->uvlinesize,
-                              s->mb_width << 3, uvh, 8, flags);
-            s->dsp.draw_edges(origdst[2], s->uvlinesize,
-                              s->mb_width << 3, uvh, 8, flags);
+            s->dsp.draw_edges2[0](origdst[0], s->linesize,
+                                  s->mb_width << 4, h,   flags);
+            s->dsp.draw_edges2[1](origdst[1], s->uvlinesize,
+                                  s->mb_width << 3, uvh, flags);
+            s->dsp.draw_edges2[1](origdst[2], s->uvlinesize,
+                                  s->mb_width << 3, uvh, flags);
         }
 
         ff_thread_report_progress(curframe, mb_y, 0);

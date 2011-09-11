@@ -1664,6 +1664,10 @@ QPEL_2TAP(avg_, 16, 3dnow)
 QPEL_2TAP(put_,  8, 3dnow)
 QPEL_2TAP(avg_,  8, 3dnow)
 
+void ff_draw_edges_16_mmx2(uint8_t *buf, int stride, int w, int h, int flags);
+void ff_draw_edges_8_mmx2 (uint8_t *buf, int stride, int w, int h, int flags);
+void ff_draw_edges_16_sse2(uint8_t *buf, int stride, int w, int h, int flags);
+void ff_draw_edges_8_sse2 (uint8_t *buf, int stride, int w, int h, int flags);
 
 #if HAVE_YASM
 typedef void emu_edge_core_func (uint8_t *buf, const uint8_t *src,
@@ -2674,6 +2678,10 @@ void dsputil_init_mmx(DSPContext* c, AVCodecContext *avctx)
             }
 
             c->add_hfyu_median_prediction = ff_add_hfyu_median_prediction_mmx2;
+            if (!high_bit_depth) {
+                c->draw_edges2[0] = ff_draw_edges_16_mmx2;
+                c->draw_edges2[1] = ff_draw_edges_8_mmx2;
+            }
 #endif
 #if HAVE_7REGS
             if (HAVE_AMD3DNOW && (mm_flags & AV_CPU_FLAG_3DNOW))
@@ -2890,6 +2898,10 @@ void dsputil_init_mmx(DSPContext* c, AVCodecContext *avctx)
             if (!high_bit_depth)
             c->emulated_edge_mc = emulated_edge_mc_sse;
             c->gmc= gmc_sse;
+            if (!high_bit_depth) {
+                c->draw_edges2[0] = ff_draw_edges_16_sse2;
+                c->draw_edges2[1] = ff_draw_edges_8_sse2;
+            }
 #endif
         }
         if (mm_flags & AV_CPU_FLAG_SSSE3) {

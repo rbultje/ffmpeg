@@ -488,6 +488,8 @@ typedef struct DSPContext {
 #define EDGE_WIDTH 16
 #define EDGE_TOP    1
 #define EDGE_BOTTOM 2
+    /* [0] = 16, [1] = 8 pixels edge writing. height must be a multiple of 2 */
+    void (*draw_edges2[2])(uint8_t *buf, int stride, int width, int height, int flags);
 
     void (*prefetch)(void *mem, int stride, int h);
 

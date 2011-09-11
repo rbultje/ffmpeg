@@ -1131,3 +1131,179 @@ VECTOR_CLIP_INT32 sse41, 11, 1, 1
 %else
 VECTOR_CLIP_INT32 sse41, 6, 1, 0
 %endif
+
+%macro MOVE_H_EDGE 3
+    lea            r3, [3*r1]
+%if mmsize == 8 && %1 == 16
+     ; add up 8 to r2 so we don't have to do two movqs
+     ; at the end of the loop
+    lea            r2, [r2+%2+8]
+%elif mmsize == 16 && %1 == 8
+    ; prevent overrun beyond end of buffer
+    lea            r2, [r2+%2-8]
+%else
+    add            r2, %2            ; &buf[width]
+%endif
+    sub            %2, %1
+.next_%3_block
+%if mmsize > %1
+%define movx movu
+%else
+%define movx mova
+%endif
+    ; move left/bottom edge and bottom pixels
+    mov           rax, %2
+    movx           m0, [%2]
+    movx   [rax+r1*1], m0
+    movx   [rax+r1*2], m0
+    movx   [rax+r3  ], m0
+%if %1 == 16
+    lea           rax, [rax+r1*4]
+    movx   [rax     ], m0
+    movx   [rax+r1*1], m0
+    movx   [rax+r1*2], m0
+    movx   [rax+r3  ], m0
+    lea           rax, [rax+r1*4]
+    movx   [rax     ], m0
+    movx   [rax+r1*1], m0
+    movx   [rax+r1*2], m0
+    movx   [rax+r3  ], m0
+%endif
+    lea           rax, [rax+r1*4]
+    movx   [rax     ], m0
+    movx   [rax+r1*1], m0
+    movx   [rax+r1*2], m0
+    movx   [rax+r3  ], m0
+    movx   [rax+r1*4], m0
+    add            %2, mmsize
+    cmp            %2, r2
+    jl .next_%3_block
+
+    ; move right/bottom edge
+%if mmsize == 16 && %1 == 8
+    movu           m1, [r2]
+%elifidn %3, top
+    movu           m1, [r2]
+%endif
+    movu    [r2+r1*1], m1
+    movu    [r2+r1*2], m1
+    movu    [r2+r3  ], m1
+%if %1 == 16
+    lea            r2, [r2+r1*4]
+    movu    [r2     ], m1
+    movu    [r2+r1*1], m1
+    movu    [r2+r1*2], m1
+    movu    [r2+r3  ], m1
+    lea            r2, [r2+r1*4]
+    movu    [r2     ], m1
+    movu    [r2+r1*1], m1
+    movu    [r2+r1*2], m1
+    movu    [r2+r3  ], m1
+%endif
+    lea            r2, [r2+r1*4]
+    movu    [r2     ], m1
+    movu    [r2+r1*1], m1
+    movu    [r2+r1*2], m1
+    movu    [r2+r3  ], m1
+    movu    [r2+r1*4], m1
+%endmacro
+
+; (uint8_t *buf, int stride, int width, int height, int flags)
+%macro DRAW_EDGES_FN 3
+%ifdef ARCH_X86_32
+cglobal draw_edges_%1_%2, 0, 6, %3
+    mov            r5, r0m           ; buf
+    mov            r1, r1m           ; stride
+    mov            r2, r2m           ; width
+    mov            r3, r3m           ; height
+    mov            r4, r4m           ; flags
+%else
+cglobal draw_edges_%1_%2, 5, 7, %3
+    mov            r5, r0            ; backup buf
+    movsxd         r1, r1d
+    movsxd         r2, r2d
+%endif
+
+.nextrow
+    ; load left/right edge values
+    mov            al, byte [r5]
+    mov            ah, al
+%if %1 == 16
+    movd           m0, eax
+%else
+    movd          mm0, eax
+%endif
+    mov            al, byte [r5+r2-1]
+    mov            ah, al
+%if %1 == 16
+    movd           m1, eax
+%else
+    movd          mm1, eax
+%endif
+
+    ; splat, store
+%if %1 == 16 && mmsize == 16
+    pshuflw        m0, m0, 0
+    pshuflw        m1, m1, 0
+    punpcklqdq     m0, m0
+    punpcklqdq     m1, m1
+    mova      [r5-16], m0
+    movu      [r5+r2], m1
+%else
+    pshufw        mm0, mm0, 0
+    pshufw        mm1, mm1, 0
+%if %1 == 16
+    movq      [r5-16], mm0
+%endif
+    movq      [r5- 8], mm0
+    movq      [r5+r2], mm1
+%if %1 == 16
+    movq   [r5+r2+ 8], mm1
+%endif
+%endif
+
+    add            r5, r1
+    dec           r3d
+    jnz .nextrow
+
+    test          r4w, 0x3
+    jnz .write_top_bottom_edges
+    RET
+
+.write_top_bottom_edges
+    test          r4w, 0x2           ; if (flags & EDGE_BOTTOM)
+    jz .write_top_edge
+
+    ; write bottom edge
+    sub            r5, r1
+%ifdef ARCH_X86_64
+    mov           r11, r2
+%endif
+    MOVE_H_EDGE    %1, r5, bottom
+    test          r4w, 0x1           ; if (flags & EDGE_TOP)
+    jnz .skip_ret
+    RET
+.skip_ret
+%ifdef ARCH_X86_64
+    mov            r2, r11
+%define bufreg r0
+%else
+    mov            r2, r2m
+%define bufreg r5
+%endif
+
+.write_top_edge
+%ifdef ARCH_X86_32
+    mov            r5, r0m
+%endif
+    neg            r1
+    MOVE_H_EDGE    %1, bufreg, top
+    RET
+%endmacro
+
+INIT_MMX
+DRAW_EDGES_FN 16, mmx2, 0
+DRAW_EDGES_FN  8, mmx2, 0
+INIT_XMM
+DRAW_EDGES_FN 16, sse2, 2
+DRAW_EDGES_FN  8, sse2, 2
