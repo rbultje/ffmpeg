@@ -34,6 +34,12 @@ yuv2yuvX_10_start:  times 4 dd 0x10000
 yuv2yuvX_9_start:   times 4 dd 0x20000
 yuv2yuvX_10_upper:  times 8 dw 0x3ff
 yuv2yuvX_9_upper:   times 8 dw 0x1ff
+pd_4:          times 4 dd 4
+pd_4min0x40000:times 4 dd 4 - (0x40000)
+pw_16:         times 8 dw 16
+pw_32:         times 8 dw 32
+pw_512:        times 8 dw 512
+pw_1024:       times 8 dw 1024
 
 SECTION .text
 
@@ -663,3 +669,147 @@ INIT_AVX
 yuv2planeX_fn avx,   8, 10, 7
 yuv2planeX_fn avx,   9,  7, 5
 yuv2planeX_fn avx,  10,  7, 5
+
+; %1=dst, %2=src, %3=mem, %4=add suffix
+%macro padd_mem 4
+%if avx_enabled == 0
+    mova            %1, %3
+    padd%4          %1, %2
+%else ; avx_enabled == 1
+    padd%4          %1, %2, %3
+%endif ; avx_enabled == 1/0
+%endmacro
+
+; %1=outout-bpc, %2=optimization, %3=alignment (u/a)
+%macro yuv2plane1_mainloop 3
+.loop_%3:
+%if %1 == 8
+    padd_mem        m0, m2, [r0+r2*2+mmsize*0], sw
+    padd_mem        m1, m3, [r0+r2*2+mmsize*1], sw
+    psraw           m0, 7
+    psraw           m1, 7
+    packuswb        m0, m1
+    mov%3      [r1+r2], m0
+%elif %1 == 16
+    padd_mem        m0, m4, [r0+r2*4+mmsize*0], d
+    padd_mem        m1, m4, [r0+r2*4+mmsize*1], d
+    padd_mem        m2, m4, [r0+r2*4+mmsize*2], d
+    padd_mem        m3, m4, [r0+r2*4+mmsize*3], d
+    psrad           m0, 3
+    psrad           m1, 3
+    psrad           m2, 3
+    psrad           m3, 3
+%ifidn %2, sse4
+    packusdw        m0, m1
+    packusdw        m2, m3
+%elifidn %2, avx
+    packusdw        m0, m1
+    packusdw        m2, m3
+%else ; mmx/sse2
+    packssdw        m0, m1
+    packssdw        m2, m3
+    paddw           m0, m5
+    paddw           m2, m5
+%endif ; mmx/sse2/sse4
+    mov%3    [r1+r2*2], m0
+    mov%3    [r1+r2*2+mmsize], m2
+%else
+    padd_mem        m0, m2, [r0+r2*2+mmsize*0], sw
+    padd_mem        m1, m2, [r0+r2*2+mmsize*1], sw
+    psraw           m0, 15 - %1
+    psraw           m1, 15 - %1
+    pmaxsw          m0, m4
+    pmaxsw          m1, m4
+    pminsw          m0, m3
+    pminsw          m1, m3
+    mov%3    [r1+r2*2], m0
+    mov%3    [r1+r2*2+mmsize], m1
+%endif
+    add             r2, mmsize
+    jl .loop_%3
+%endmacro
+
+%macro yuv2plane1_fn 4
+cglobal yuv2plane1_%1_%2, %4, %4, %3
+%if %1 == 8
+    add             r1, r2
+%else ; %1 != 8
+    lea             r1, [r1+r2*2]
+%endif ; %1 == 8
+%if %1 == 16
+    lea             r0, [r0+r2*4]
+%else ; %1 != 16
+    lea             r0, [r0+r2*2]
+%endif ; %1 == 16
+    neg             r2
+
+%if %1 == 8
+    pxor            m4, m4               ; zero
+
+    ; create registers holding dither
+    movq            m3, [r3]             ; dither
+    test           r4d, r4d
+    jz              .no_rot
+%if mmsize == 16
+    punpcklqdq      m3, m3
+%endif ; mmsize == 16
+    PALIGNR_MMX     m3, m3, 3, m2
+.no_rot:
+%if mmsize == 8
+    mova            m2, m3
+    punpckhbw       m3, m4               ; byte->word
+    punpcklbw       m2, m4               ; byte->word
+%else
+    punpcklbw       m3, m4
+    mova            m2, m3
+%endif
+%elif %1 == 9
+    pxor            m4, m4
+    mova            m3, [pw_512]
+    mova            m2, [pw_32]
+%elif %1 == 10
+    pxor            m4, m4
+    mova            m3, [pw_1024]
+    mova            m2, [pw_16]
+%else ; %1 == 16
+%ifidn %2, sse4
+    mova            m4, [pd_4]
+%else ; mmx/sse2
+    mova            m4, [pd_4min0x40000]
+    mova            m5, [minshort]
+%endif ; mmx/sse2/sse4
+%endif ; %1 == ..
+
+    ; actual pixel scaling
+%if mmsize == 8
+    yuv2plane1_mainloop %1, %2, a
+%else ; mmsize == 16
+    test            r1, 15
+    jnz .unaligned
+    yuv2plane1_mainloop %1, %2, a
+    RET
+.unaligned
+    yuv2plane1_mainloop %1, %2, u
+%endif ; mmsize == 8/16
+    RET
+%endmacro
+
+%ifdef ARCH_X86_32
+INIT_MMX
+yuv2plane1_fn  8, mmx,  0, 5
+yuv2plane1_fn  9, mmx2, 0, 3
+yuv2plane1_fn 10, mmx2, 0, 3
+yuv2plane1_fn 16, mmx,  0, 3
+%endif
+INIT_XMM
+yuv2plane1_fn  8, sse2, 5, 5
+yuv2plane1_fn  9, sse2, 5, 3
+yuv2plane1_fn 10, sse2, 5, 3
+yuv2plane1_fn 16, sse2, 6, 3
+
+yuv2plane1_fn 16, sse4, 5, 3
+
+yuv2plane1_fn  8, avx,  5, 5
+yuv2plane1_fn  9, avx,  5, 3
+yuv2plane1_fn 10, avx,  5, 3
+yuv2plane1_fn 16, avx,  5, 3
