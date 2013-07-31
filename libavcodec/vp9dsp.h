@@ -1,0 +1,68 @@
+/*
+ * VP9 compatible video decoder
+ *
+ * Copyright (C) 2013 Ronald S. Bultje
+ *
+ * This file is part of FFmpeg.
+ *
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * FFmpeg is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
+#ifndef AVCODEC_VP9DSP_H
+#define AVCODEC_VP9DSP_H
+
+#include <stdint.h>
+
+#include "vp9.h"
+
+typedef struct VP9DSPContext {
+    /*
+     * dimension 1: 0=4x4, 1=8x8, 2=16x16, 3=32x32
+     * dimension 2: intra prediction modes
+     *
+     * dst/left/top is aligned by transform-size (i.e. 4, 8, 16 or 32 pixels)
+     * stride is aligned by 16 pixels
+     * top[-1] is top/left; top[4,7] is top-right for 4x4
+     */
+    // FIXME(rbultje) maybe replace left/top pointers with HAVE_TOP/
+    // HAVE_LEFT/HAVE_TOPRIGHT flags instead, and then handle it in-place?
+    // also needs to fit in with what h264/vp8/etc do
+    void (*intra_pred[N_TXFM_SIZES][N_INTRA_PRED_MODES])(uint8_t *dst,
+                                                         ptrdiff_t stride,
+                                                         const uint8_t *left,
+                                                         const uint8_t *top);
+
+    /*
+     * dimension 1: 0=4x4, 1=8x8, 2=16x16, 3=32x32, 4=lossless (3-4=dct only)
+     * dimension 2: 0=dct/dct, 1=dct/adst, 2=adst/dct, 3=adst/adst
+     *
+     * dst is aligned by transform-size (i.e. 4, 8, 16 or 32 pixels)
+     * stride is aligned by 16 pixels
+     * block is 16-byte aligned
+     * eob indicates the position (+1) of the last non-zero coefficient,
+     * in scan-order. This can be used to write faster versions, e.g. a
+     * dc-only 4x4/8x8/16x16/32x32, or a 4x4-only (eob<10) 8x8/16x16/32x32,
+     * etc.
+     */
+    // FIXME also write idct_add_block() versions for whole (inter) pred
+    // blocks, so we can do 2 4x4s at once
+    void (*itxfm_add[N_TXFM_SIZES + 1][N_TXFM_TYPES])(uint8_t *dst,
+                                                      ptrdiff_t stride,
+                                                      int16_t *block, int eob);
+} VP9DSPContext;
+
+void ff_vp9dsp_init(VP9DSPContext *dsp);
+
+#endif /* AVCODEC_VP9DSP_H */
