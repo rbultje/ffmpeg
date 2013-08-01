@@ -243,12 +243,13 @@ static av_always_inline unsigned int vp56_rac_renorm(VP56RangeCoder *c)
 
 #if   ARCH_ARM
 #include "arm/vp56_arith.h"
-#elif ARCH_X86
-#include "x86/vp56_arith.h"
+//#elif ARCH_X86
+//#include "x86/vp56_arith.h"
 #endif
 
 #ifndef vp56_rac_get_prob
 #define vp56_rac_get_prob vp56_rac_get_prob
+extern int DEBUGFFBOOLCODER;
 static av_always_inline int vp56_rac_get_prob(VP56RangeCoder *c, uint8_t prob)
 {
     unsigned int code_word = vp56_rac_renorm(c);
@@ -259,6 +260,9 @@ static av_always_inline int vp56_rac_get_prob(VP56RangeCoder *c, uint8_t prob)
     c->high = bit ? c->high - low : low;
     c->code_word = bit ? code_word - low_shift : code_word;
 
+    if (DEBUGFFBOOLCODER)
+        printf("BOOLCODER p=%d bit=%d, r=%d\n",
+               prob, bit, c->high);
     return bit;
 }
 #endif

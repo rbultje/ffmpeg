@@ -71,15 +71,15 @@ static const int8_t vp9_segmentation_tree[7][2] = {
 };
 
 static const int8_t vp9_intramode_tree[9][2] = {
-    { -DC_PRED, 1 },                                // '0'
-     { -TM_VP8_PRED, 2 },                           // '10'
-      { -VERT_PRED, 3 },                            // '110'
+    { -DC_PRED, 1 },                                  // '0'
+     { -TM_VP8_PRED, 2 },                             // '10'
+      { -VERT_PRED, 3 },                              // '110'
        { 4, 6 },
-        { HOR_PRED, 5 },                            // '11100'
-         { DIAG_DOWN_RIGHT_PRED, VERT_RIGHT_PRED }, // '11101x'
-        { DIAG_DOWN_LEFT_PRED, 7 },                 // '11110'
-         { VERT_LEFT_PRED, 8 },                     // '111110'
-          { HOR_DOWN_PRED, HOR_UP_PRED },           // '111111x'
+        { -HOR_PRED, 5 },                             // '11100'
+         { -DIAG_DOWN_RIGHT_PRED, -VERT_RIGHT_PRED }, // '11101x'
+        { -DIAG_DOWN_LEFT_PRED, 7 },                  // '11110'
+         { -VERT_LEFT_PRED, 8 },                      // '111110'
+          { -HOR_DOWN_PRED, -HOR_UP_PRED },           // '111111x'
 };
 
 static const uint8_t vp9_default_kf_ymode_probs[10][10][9] = {
