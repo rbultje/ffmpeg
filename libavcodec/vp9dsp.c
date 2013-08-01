@@ -1193,9 +1193,9 @@ static void type_a##_##type_b##_##sz##x##sz##_add_c(uint8_t *dst, \
         type_b##sz##_1d(tmp + i, sz, out); \
         for (j = 0; j < sz; j++) \
             dst[j * stride] = av_clip_uint8(dst[j * stride] + \
-                                            bits ? \
-                                            (out[j] + (1 << (bits - 1))) >> bits : \
-                                            out[j]); \
+                                            (bits ? \
+                                             (out[j] + (1 << (bits - 1))) >> bits : \
+                                             out[j])); \
         dst++; \
     } \
 }
