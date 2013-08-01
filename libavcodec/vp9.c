@@ -958,15 +958,15 @@ static int decode_coeffs_b(VP56RangeCoder *c, int16_t *coef, int n_coeffs,
         }
         if (!--band_left)
             band_left = band_counts[++band];
-        tp = p[band][nnz];
         if (tx == TX_32X32) // FIXME slow
             coef[rc] = ((vp8_rac_get(c) ? -val : val) * qmul[!!i]) / 2;
         else
             coef[rc] = (vp8_rac_get(c) ? -val : val) * qmul[!!i];
         nnz = (1 + cache[nb[i][0]] + cache[nb[i][1]]) >> 1;
+        tp = p[band][nnz];
     } while (++i < n_coeffs);
 
-    return 0;
+    return !!i;
 }
 
 static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
