@@ -178,13 +178,14 @@ static int update_size(AVCodecContext *ctx, int w, int h)
     s->sb_rows  = (h + 63) >> 6;
     s->cols     = (w + 7) >> 3;
     s->rows     = (h + 7) >> 3;
+    av_free(s->above_partition_ctx);
     s->above_partition_ctx = av_malloc(s->cols * 9);
     s->above_skip_ctx = s->above_partition_ctx + s->cols;
     s->above_txfm_ctx = s->above_skip_ctx + s->cols;
     s->above_mode_ctx = s->above_txfm_ctx + s->cols;
     s->above_y_nnz_ctx = s->above_mode_ctx + s->cols * 2;
     s->above_uv_nnz_ctx[0] = s->above_y_nnz_ctx + s->cols * 2;
-    s->above_uv_nnz_ctx[1] = s->above_uv_nnz_ctx[0];
+    s->above_uv_nnz_ctx[1] = s->above_uv_nnz_ctx[0] + s->cols;
 
     return 0;
 }
@@ -861,14 +862,14 @@ static int decode_coeffs_b(VP56RangeCoder *c, int16_t *coef, int n_coeffs,
 
     skip_eob:
         if (!vp56_rac_get_prob_branchy(c, tp[1])) { // zero
-            if (++i == 16)
-                break; //invalid input; blocks should end with EOB
             cnt[band][nnz][0]++;
             if (!--band_left)
                 band_left = band_counts[++band];
             cache[scan[i]] = 0;
             nnz = (1 + cache[nb[i][0]] + cache[nb[i][1]]) >> 1;
             tp = p[band][nnz];
+            if (++i == n_coeffs)
+                break; //invalid input; blocks should end with EOB
             goto skip_eob;
         }
 
@@ -1043,6 +1044,174 @@ static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
     return 0;
 }
 
+static av_always_inline int check_intra_mode(int mode, uint8_t **a,
+                                             uint8_t *dst, ptrdiff_t stride,
+                                             uint8_t *l, int col, int x, int w,
+                                             int y, enum TxfmMode tx)
+{
+    // FIXME make work with tiling enabled (have_left check is wrong)
+    int have_top = y > 0, have_left = col * 2 + x > 0, have_topright = x < w - 1;
+    static const uint8_t mode_conv[2][2][10] = {
+        { /* have_left = 0 */
+           { /* have_top = 0 */
+               [VERT_PRED]            = DC_127_PRED,
+               [HOR_PRED]             = DC_129_PRED,
+               [DC_PRED]              = DC_128_PRED,
+               [DIAG_DOWN_LEFT_PRED]  = DC_127_PRED,
+               [DIAG_DOWN_RIGHT_PRED] = DIAG_DOWN_RIGHT_PRED,
+               [VERT_RIGHT_PRED]      = VERT_RIGHT_PRED,
+               [HOR_DOWN_PRED]        = HOR_DOWN_PRED,
+               [VERT_LEFT_PRED]       = DC_127_PRED,
+               [HOR_UP_PRED]          = DC_129_PRED,
+               [TM_VP8_PRED]          = DC_129_PRED,
+           }, { /* have_top = 1 */
+               [VERT_PRED]            = VERT_PRED,
+               [HOR_PRED]             = DC_129_PRED,
+               [DC_PRED]              = TOP_DC_PRED,
+               [DIAG_DOWN_LEFT_PRED]  = DIAG_DOWN_LEFT_PRED,
+               [DIAG_DOWN_RIGHT_PRED] = DIAG_DOWN_RIGHT_PRED,
+               [VERT_RIGHT_PRED]      = VERT_RIGHT_PRED,
+               [HOR_DOWN_PRED]        = HOR_DOWN_PRED,
+               [VERT_LEFT_PRED]       = VERT_LEFT_PRED,
+               [HOR_UP_PRED]          = DC_129_PRED,
+               [TM_VP8_PRED]          = VERT_PRED,
+           }
+        }, { /* have_left = 1 */
+            { /* have_top = 0 */
+                [VERT_PRED]            = DC_127_PRED,
+                [HOR_PRED]             = HOR_PRED,
+                [DC_PRED]              = LEFT_DC_PRED,
+                [DIAG_DOWN_LEFT_PRED]  = DC_127_PRED,
+                [DIAG_DOWN_RIGHT_PRED] = DIAG_DOWN_RIGHT_PRED,
+                [VERT_RIGHT_PRED]      = VERT_RIGHT_PRED,
+                [HOR_DOWN_PRED]        = HOR_DOWN_PRED,
+                [VERT_LEFT_PRED]       = DC_127_PRED,
+                [HOR_UP_PRED]          = HOR_UP_PRED,
+                [TM_VP8_PRED]          = HOR_PRED,
+            }, { /* have_top = 1 */
+                [VERT_PRED]            = VERT_PRED,
+                [HOR_PRED]             = HOR_PRED,
+                [DC_PRED]              = DC_PRED,
+                [DIAG_DOWN_LEFT_PRED]  = DIAG_DOWN_LEFT_PRED,
+                [DIAG_DOWN_RIGHT_PRED] = DIAG_DOWN_RIGHT_PRED,
+                [VERT_RIGHT_PRED]      = VERT_RIGHT_PRED,
+                [HOR_DOWN_PRED]        = HOR_DOWN_PRED,
+                [VERT_LEFT_PRED]       = VERT_LEFT_PRED,
+                [HOR_UP_PRED]          = HOR_UP_PRED,
+                [TM_VP8_PRED]          = TM_VP8_PRED,
+            }
+        }
+    };
+    static const uint8_t needs_left[N_INTRA_PRED_MODES] = {
+        [VERT_PRED]            = 0,
+        [HOR_PRED]             = 1,
+        [DC_PRED]              = 1,
+        [DIAG_DOWN_LEFT_PRED]  = 0,
+        [DIAG_DOWN_RIGHT_PRED] = 1,
+        [VERT_RIGHT_PRED]      = 1,
+        [HOR_DOWN_PRED]        = 1,
+        [VERT_LEFT_PRED]       = 0,
+        [HOR_UP_PRED]          = 1,
+        [TM_VP8_PRED]          = 1,
+        [LEFT_DC_PRED]         = 1,
+        [TOP_DC_PRED]          = 0,
+        [DC_128_PRED]          = 0,
+        [DC_127_PRED]          = 0,
+        [DC_129_PRED]          = 0,
+    }, needs_top[N_INTRA_PRED_MODES] = {
+        [VERT_PRED]            = 1,
+        [HOR_PRED]             = 0,
+        [DC_PRED]              = 1,
+        [DIAG_DOWN_LEFT_PRED]  = 1,
+        [DIAG_DOWN_RIGHT_PRED] = 1,
+        [VERT_RIGHT_PRED]      = 1,
+        [HOR_DOWN_PRED]        = 1,
+        [VERT_LEFT_PRED]       = 1,
+        [HOR_UP_PRED]          = 0,
+        [TM_VP8_PRED]          = 1,
+        [LEFT_DC_PRED]         = 0,
+        [TOP_DC_PRED]          = 1,
+        [DC_128_PRED]          = 0,
+        [DC_127_PRED]          = 0,
+        [DC_129_PRED]          = 0,
+    }, needs_topleft[N_INTRA_PRED_MODES] = {
+        [VERT_PRED]            = 0,
+        [HOR_PRED]             = 0,
+        [DC_PRED]              = 0,
+        [DIAG_DOWN_LEFT_PRED]  = 0,
+        [DIAG_DOWN_RIGHT_PRED] = 1,
+        [VERT_RIGHT_PRED]      = 1,
+        [HOR_DOWN_PRED]        = 1,
+        [VERT_LEFT_PRED]       = 0,
+        [HOR_UP_PRED]          = 0,
+        [TM_VP8_PRED]          = 1,
+        [LEFT_DC_PRED]         = 0,
+        [TOP_DC_PRED]          = 0,
+        [DC_128_PRED]          = 0,
+        [DC_127_PRED]          = 0,
+        [DC_129_PRED]          = 0,
+    }, needs_topright[N_INTRA_PRED_MODES] = {
+        [VERT_PRED]            = 0,
+        [HOR_PRED]             = 0,
+        [DC_PRED]              = 0,
+        [DIAG_DOWN_LEFT_PRED]  = 1,
+        [DIAG_DOWN_RIGHT_PRED] = 0,
+        [VERT_RIGHT_PRED]      = 0,
+        [HOR_DOWN_PRED]        = 0,
+        [VERT_LEFT_PRED]       = 1,
+        [HOR_UP_PRED]          = 0,
+        [TM_VP8_PRED]          = 0,
+        [LEFT_DC_PRED]         = 0,
+        [TOP_DC_PRED]          = 0,
+        [DC_128_PRED]          = 0,
+        [DC_127_PRED]          = 0,
+        [DC_129_PRED]          = 0,
+    };
+
+    assert(mode >= 0 && mode < 10);
+    mode = mode_conv[have_left][have_top][mode];
+    if (needs_top[mode]) {
+        if (have_top &&
+            (!needs_topleft[mode] || have_left) &&
+            (tx != TX_4X4 || !needs_topright[mode] || have_topright)) {
+            *a = &dst[-stride];
+        } else {
+            if (have_top) {
+                memcpy(*a, &dst[-stride], 4 << tx);
+            } else {
+                memset(*a, 127, 4 << tx);
+            }
+            if (needs_topleft[mode]) {
+                if (have_left && have_top) {
+                    (*a)[-1] = dst[-stride - 1];
+                } else {
+                    (*a)[-1] = have_top ? 129 : 127;
+                }
+            }
+            if (tx == TX_4X4 && needs_topright[mode]) {
+                if (have_topright) {
+                    memcpy(&(*a)[4], &dst[4 - stride], 4);
+                } else {
+                    memset(&(*a)[4], (*a)[3], 4);
+                }
+            }
+        }
+    }
+    if (needs_left[mode]) {
+        if (have_left) {
+            int i;
+
+            for (i = 0; i < (4 << tx); i++) {
+                l[i] = dst[i * stride - 1];
+            }
+        } else {
+            memset(l, 129, 4 << tx);
+        }
+    }
+
+    return mode;
+}
+
 static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
                         ptrdiff_t yoff, ptrdiff_t uvoff)
 {
@@ -1062,10 +1231,13 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
         for (x = 0; x < w4; x += step1d, ptr += 4 * step1d, n += step) {
             int mode = b->mode[b->bl == BL_8X8 && b->tx == TX_4X4 ?
                                y * 2 + x : 0];
+            // FIXME alignment
+            uint8_t a_buf[48], *a = &a_buf[16], l[32];
             enum TxfmType txtp = vp9_intra_txfm_type[mode];
-            // FIXME left/above pointers
-            s->dsp.intra_pred[b->tx][mode](ptr, s->f->linesize[0],
-                                           NULL, NULL);
+
+            mode = check_intra_mode(mode, &a, ptr, s->f->linesize[0], l,
+                                    col, x, w4, y * 2 + y, b->tx);
+            s->dsp.intra_pred[b->tx][mode](ptr, s->f->linesize[0], l, a);
             // FIXME eob
             s->dsp.itxfm_add[b->tx][txtp](ptr, s->f->linesize[0],
                                           s->block + 16 * n, 16 * step);
@@ -1082,9 +1254,13 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
         for (n = 0, y = 0; y < h4; y += uvstep1d) {
             uint8_t *ptr = dst;
             for (x = 0; x < w4; x += uvstep1d, ptr += 4 * uvstep1d, n += step) {
-                // FIXME left/above pointers
-                s->dsp.intra_pred[uvtx][b->uvmode](ptr, s->f->linesize[1],
-                                                   NULL, NULL);
+                int mode = b->uvmode;
+                // FIXME alignment
+                uint8_t a_buf[48], *a = &a_buf[16], l[32];
+
+                mode = check_intra_mode(mode, &a, ptr, s->f->linesize[1], l,
+                                        col, x, w4, y * 2 + y, uvtx);
+                s->dsp.intra_pred[uvtx][mode](ptr, s->f->linesize[1], l, a);
                 // FIXME eob
                 s->dsp.itxfm_add[uvtx][DCT_DCT](ptr, s->f->linesize[1],
                                                 s->uvblock[p] + 16 * n, 16 * step);
@@ -1104,6 +1280,7 @@ static int decode_b(AVCodecContext *ctx, int row, int col, ptrdiff_t yoff,
     VP9Block b;
     int res;
 
+    printf("Decode block, level=%d, partitioning=%d\n", bl, bp);
     b.bl = bl;
     b.bp = bp;
     if ((res = decode_mode(ctx, row, col, &b)) < 0)
@@ -1129,12 +1306,15 @@ static int decode_sb(AVCodecContext *ctx, int row, int col,
     enum BlockPartition bp;
     ptrdiff_t hbs = 4 >> bl;
 
+    printf("Decode partition, level=%d (row=%d/%d, col=%d/%d, hbs=%d)\n",
+           bl, row, s->rows, col, s->cols, hbs);
     if (bl == BL_8X8) {
         bp = vp8_rac_get_tree(&s->c, vp9_partition_tree, p);
         res = decode_b(ctx, row, col, yoff, uvoff, bl, bp);
-    } else if (col + hbs > s->cols) {
-        if (row + hbs > s->rows) {
+    } else if (col + hbs < s->cols) {
+        if (row + hbs < s->rows) {
             bp = vp8_rac_get_tree(&s->c, vp9_partition_tree, p);
+            printf("Level=%d, partition: %d\n", bl, bp);
             switch (bp) {
             case PARTITION_NONE:
                 res = decode_b(ctx, row, col, yoff, uvoff, bl, bp);
@@ -1177,7 +1357,7 @@ static int decode_sb(AVCodecContext *ctx, int row, int col,
             bp = PARTITION_H;
             res = decode_b(ctx, row, col, yoff, uvoff, bl, bp);
         }
-    } else if (row + hbs > s->rows) {
+    } else if (row + hbs < s->rows) {
         if (vp56_rac_get_prob_branchy(&s->c, p[2])) {
             bp = PARTITION_SPLIT;
             if (!(res = decode_sb(ctx, row, col, yoff, uvoff, bl + 1))) {
@@ -1194,6 +1374,7 @@ static int decode_sb(AVCodecContext *ctx, int row, int col,
         res = decode_sb(ctx, row, col, yoff, uvoff, bl + 1);
     }
     s->counts.partition[bl][c][bp]++;
+    printf("End of decode partition, level=%d, res=%d\n", bl, res);
 
     return res;
 }
@@ -1226,7 +1407,8 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
     memset(s->above_skip_ctx, 0, s->cols);
     memset(s->above_mode_ctx, DC_PRED, s->cols * 2);
     memset(s->above_y_nnz_ctx, 0, s->cols * 2);
-    memset(s->above_uv_nnz_ctx, 0, s->cols * 2);
+    memset(s->above_uv_nnz_ctx[0], 0, s->cols);
+    memset(s->above_uv_nnz_ctx[1], 0, s->cols);
     // FIXME clean above contexts
     for (tile_row = 0; tile_row < s->tiling.tile_rows; tile_row++) {
         ptrdiff_t yoff, uvoff;
