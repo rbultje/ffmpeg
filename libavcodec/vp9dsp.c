@@ -1555,8 +1555,8 @@ static void vp9dsp_itxfm_init(VP9DSPContext *dsp)
 {
 #define init_itxfm(tx, sz) \
     dsp->itxfm_add[tx][DCT_DCT]   = idct_idct_##sz##_add_c; \
-    dsp->itxfm_add[tx][ADST_DCT]  = iadst_idct_##sz##_add_c; \
-    dsp->itxfm_add[tx][DCT_ADST]  = idct_iadst_##sz##_add_c; \
+    dsp->itxfm_add[tx][DCT_ADST]  = iadst_idct_##sz##_add_c; \
+    dsp->itxfm_add[tx][ADST_DCT]  = idct_iadst_##sz##_add_c; \
     dsp->itxfm_add[tx][ADST_ADST] = iadst_iadst_##sz##_add_c
 
 #define init_idct(tx, nm) \
