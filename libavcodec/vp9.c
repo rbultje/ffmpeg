@@ -1306,13 +1306,15 @@ static int decode_sb(AVCodecContext *ctx, int row, int col,
     enum BlockPartition bp;
     ptrdiff_t hbs = 4 >> bl;
 
-    printf("Decode partition, level=%d (row=%d/%d, col=%d/%d, hbs=%d)\n",
-           bl, row, s->rows, col, s->cols, hbs);
+    printf("Decode partition, level=%d (row=%d/%d, col=%d/%d, hbs=%d), r=%d\n",
+           bl, row, s->rows, col, s->cols, hbs, s->c.high);
     if (bl == BL_8X8) {
         bp = vp8_rac_get_tree(&s->c, vp9_partition_tree, p);
         res = decode_b(ctx, row, col, yoff, uvoff, bl, bp);
     } else if (col + hbs < s->cols) {
         if (row + hbs < s->rows) {
+            printf("Probs %d %d %d (c=%d)\n",
+                   p[0], p[1], p[2], c);
             bp = vp8_rac_get_tree(&s->c, vp9_partition_tree, p);
             printf("Level=%d, partition: %d\n", bl, bp);
             switch (bp) {
@@ -1434,6 +1436,12 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
             if (tile_size < size)
                 return AVERROR_INVALIDDATA;
             ff_vp56_init_range_decoder(&s->c, data, tile_size);
+            printf("Using data 0x%02x %02x %02x %02x %02x (s=%d)\n",
+                   data[0], data[1], data[2], data[3], data[4], tile_size);
+            {
+                int m = vp56_rac_get_prob(&s->c, 128);
+                printf("Marker: %d\n", m);
+            }
             data += tile_size;
             size -= tile_size;
 
