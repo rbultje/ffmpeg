@@ -1280,7 +1280,7 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
                 uint8_t a_buf[48], *a = &a_buf[16], l[32];
 
                 mode = check_intra_mode(mode, &a, ptr, s->f->linesize[1], l,
-                                        col, x, w4, y * 2 + y, uvtx);
+                                        col, x, w4, row * 2 + y, uvtx);
                 s->dsp.intra_pred[uvtx][mode](ptr, s->f->linesize[1], l, a);
                 // FIXME eob
                 s->dsp.itxfm_add[uvtx][DCT_DCT](ptr, s->f->linesize[1],
