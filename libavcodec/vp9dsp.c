@@ -1304,7 +1304,7 @@ static av_always_inline void iadst8_1d(const int16_t *in, ptrdiff_t stride,
     t4a = 15137 * t4 +  6270 * t5;
     t5a =  6270 * t4 - 15137 * t5;
     t6a = 15137 * t7 -  6270 * t6;
-    t7a =  6270 * t7 - 15137 * t6;
+    t7a =  6270 * t7 + 15137 * t6;
 
     out[0] =   t0 + t2;
     out[7] = -(t1 + t3);
