@@ -827,7 +827,8 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
                     l[1] = a[1] = b->mode[3] = b->mode[2];
                 }
             } else {
-                l[1] = a[1] = b->mode[2] = b->mode[3] = b->mode[1];
+                b->mode[2] = b->mode[0];
+                l[1] = a[1] = b->mode[3] = b->mode[1];
             }
             DEBUGFFBOOLCODER = 0;
         } else {
@@ -1256,7 +1257,7 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
             enum TxfmType txtp = vp9_intra_txfm_type[mode];
 
             mode = check_intra_mode(mode, &a, ptr, s->f->linesize[0], l,
-                                    col, x, w4, y * 2 + y, b->tx);
+                                    col, x, w4, row * 2 + y, b->tx);
             s->dsp.intra_pred[b->tx][mode](ptr, s->f->linesize[0], l, a);
             // FIXME eob
             s->dsp.itxfm_add[b->tx][txtp](ptr, s->f->linesize[0],
