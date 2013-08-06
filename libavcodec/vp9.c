@@ -233,7 +233,7 @@ static int inv_remap_prob(int v, int m) {
 }
 
 static int decode_uniform(VP56RangeCoder *c, int range) {
-    int v, bits = ff_log2_16bit(range);
+    int v, bits = av_ceil_log2(range);
     int lower = (1 << bits) - range;
     if (!bits)  // FIXME can this happen?
         return 0;
