@@ -479,8 +479,8 @@ static int decode_frame_header(AVCodecContext *ctx,
     if (size2 > size - (data2 - data))
         return AVERROR_INVALIDDATA;
     ff_vp56_init_range_decoder(&s->c, data2, size2);
-    printf("Initing header data from %02x %02x %02x %02x %02x s=%d\n",
-           data2[0], data2[1], data2[2], data2[3], data2[4], size2);
+    if (vp56_rac_get_prob_branchy(&s->c, 128)) // marker bit
+        return AVERROR_INVALIDDATA;
 
     // FIXME for keyframes we don't need to zero all of this - most is unused
     memset(&s->counts, 0, sizeof(s->counts));
@@ -488,10 +488,6 @@ static int decode_frame_header(AVCodecContext *ctx,
     // as explicit copies if the fw update is missing (and skip the copy upon
     // fw update)?
     s->prob.p = s->prob_ctx[c].p;
-    {
-        int m = vp56_rac_get_prob(&s->c, 128);
-    printf("Marker bit: %d, r=%d\n", m, s->c.high);
-    }
 
     // txfm updates
     if (s->lossless) {
@@ -517,7 +513,6 @@ static int decode_frame_header(AVCodecContext *ctx,
                             update_prob(&s->c, s->prob.p.tx32p[i][j]);
         }
     }
-    printf("Post-tx mode=%d (ll=%d) r=%d\n", s->txfmmode, s->lossless, s->c.high);
 
     // coef updates
     for (i = 0; i < 4; i++) {
@@ -553,8 +548,6 @@ static int decode_frame_header(AVCodecContext *ctx,
                             p[3] = 0;
                         }
         }
-        printf("Post coef updates i=%d r=%d\n",
-               i, s->c.high);
         if (s->txfmmode == i)
             break;
     }
@@ -562,9 +555,7 @@ static int decode_frame_header(AVCodecContext *ctx,
     // mode updates
     for (i = 0; i < 3; i++)
         if (vp56_rac_get_prob_branchy(&s->c, 252)) {
-            printf("Skip p [%d] was updated from %d ...", i, s->prob.p.skip[i]);
             s->prob.p.skip[i] = update_prob(&s->c, s->prob.p.skip[i]);
-            printf(" ... to %d\n", s->prob.p.skip[i]);
         }
     if (!s->keyframe && !s->intraonly) {
         for (i = 0; i < 7; i++)
@@ -709,7 +700,6 @@ static const uint8_t bwh_tab[5][4][2] = {
     { { 1, 1 }, { 1, 1 }, { 1, 1 }, { 1, 1 } },
 };
 
-int DEBUGFFBOOLCODER = 0;
 static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
 {
     static const uint8_t left_ctx[4][4] = {
@@ -727,7 +717,6 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
     VP9Context *s = ctx->priv_data;
     enum TxfmMode max_tx = max_tx_for_bl_bp[b->bl][b->bp];
 
-    printf("Partition %d size %d\n", b->bp, b->bl);
     if (s->keyframe || s->intraonly) {
         uint8_t *a, *l;
 
@@ -737,13 +726,8 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
             s->segmentation.feat[b->seg_id].skip_enabled;
         if (!b->skip) {
             int c = s->left_skip_ctx[row & 7] + s->above_skip_ctx[col];
-            printf("pre-skip r=%d\n", s->c.high);
             b->skip = vp56_rac_get_prob(&s->c, s->prob.p.skip[c]);
             s->counts.skip[c][b->skip]++;
-            printf("Skip=%d (seg_enabled=%d, seg_id=%d, skip[sg]=%d, r=%d, c=%d p=%d\n",
-                   b->skip, s->segmentation.enabled, b->seg_id,
-                   s->segmentation.feat[b->seg_id].skip_enabled, s->c.high, c,
-                   s->prob.p.skip[c]);
         }
         // FIXME share this code with inter coding
         if (s->txfmmode == TX_SWITCHABLE) {
@@ -796,19 +780,14 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
         a = &s->above_mode_ctx[col * 2];
         l = &s->left_mode_ctx[(row & 7) << 1];
         if (b->bl == BL_8X8 && b->bp != PARTITION_NONE) {
-            if (!row && !col)
-                DEBUGFFBOOLCODER = 1;
             // FIXME the memory storage intermediates here aren't really
             // necessary, they're just there to make the code slightly
             // simpler for now
             b->mode[0] = a[0] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                     vp9_default_kf_ymode_probs[a[0]][l[0]]);
-            printf("Intra pred mode1=%d r=%d\n", b->mode[0], s->c.high);
             if (b->bp != PARTITION_H) {
                 b->mode[1] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                  vp9_default_kf_ymode_probs[a[1]][b->mode[0]]);
-                printf("Intra pred mode2=%d r=%d a=%d l=%d\n",
-                       b->mode[1], s->c.high, a[1], b->mode[0]);
                 l[0] = a[1] = b->mode[1];
             } else {
                 l[0] = a[1] = b->mode[1] = b->mode[0];
@@ -816,12 +795,9 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
             if (b->bp != PARTITION_V) {
                 b->mode[2] = a[0] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                         vp9_default_kf_ymode_probs[a[0]][l[1]]);
-                printf("Intra pred mode3=%d r=%d\n", b->mode[2], s->c.high);
                 if (b->bp != PARTITION_H) {
                     b->mode[3] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                   vp9_default_kf_ymode_probs[a[1]][b->mode[2]]);
-                    printf("Intra pred mode4=%d r=%d a=%d l=%d\n",
-                           b->mode[3], s->c.high, a[1], b->mode[2]);
                     l[1] = a[1] = b->mode[3];
                 } else {
                     l[1] = a[1] = b->mode[3] = b->mode[2];
@@ -830,11 +806,9 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
                 b->mode[2] = b->mode[0];
                 l[1] = a[1] = b->mode[3] = b->mode[1];
             }
-            DEBUGFFBOOLCODER = 0;
         } else {
             b->mode[0] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                           vp9_default_kf_ymode_probs[*a][*l]);
-            printf("Intra pred mode=%d\n", b->mode[0]);
             b->mode[3] = b->mode[2] = b->mode[1] = b->mode[0];
             // FIXME this can probably be optimized
             memset(a, b->mode[0], bwh_tab[b->bl][b->bp][0]);
@@ -842,7 +816,6 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
         }
         b->uvmode = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                      vp9_default_kf_uvmode_probs[b->mode[3]]);
-        printf("Intra pred uvmode=%d r=%d\n", b->uvmode, s->c.high);
     } else {
         // FIXME unimplemented inter coding
         printf("Inter frames not yet working\n");
@@ -1301,12 +1274,10 @@ static int decode_b(AVCodecContext *ctx, int row, int col, ptrdiff_t yoff,
     VP9Block b;
     int res;
 
-    printf("Decode block, level=%d, partitioning=%d\n", bl, bp);
     b.bl = bl;
     b.bp = bp;
     if ((res = decode_mode(ctx, row, col, &b)) < 0)
         return res;
-    printf("Post mode r=%d\n", s->c.high);
     if (!b.skip) {
         if ((res = decode_coeffs(ctx, &b, row, col)) < 0)
             return res;
@@ -1340,17 +1311,12 @@ static int decode_sb(AVCodecContext *ctx, int row, int col,
     enum BlockPartition bp;
     ptrdiff_t hbs = 4 >> bl;
 
-    printf("Decode partition, level=%d (row=%d/%d, col=%d/%d, hbs=%d), r=%d\n",
-           bl, row, s->rows, col, s->cols, hbs, s->c.high);
     if (bl == BL_8X8) {
         bp = vp8_rac_get_tree(&s->c, vp9_partition_tree, p);
         res = decode_b(ctx, row, col, yoff, uvoff, bl, bp);
     } else if (col + hbs < s->cols) {
         if (row + hbs < s->rows) {
-            printf("Probs %d %d %d (c=%d)\n",
-                   p[0], p[1], p[2], c);
             bp = vp8_rac_get_tree(&s->c, vp9_partition_tree, p);
-            printf("Level=%d, partition: %d\n", bl, bp);
             switch (bp) {
             case PARTITION_NONE:
                 res = decode_b(ctx, row, col, yoff, uvoff, bl, bp);
@@ -1410,7 +1376,6 @@ static int decode_sb(AVCodecContext *ctx, int row, int col,
         res = decode_sb(ctx, row, col, yoff, uvoff, bl + 1);
     }
     s->counts.partition[bl][c][bp]++;
-    printf("End of decode partition, level=%d, res=%d\n", bl, res);
 
     return res;
 }
@@ -1470,12 +1435,8 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
             if (tile_size < size)
                 return AVERROR_INVALIDDATA;
             ff_vp56_init_range_decoder(&s->c, data, tile_size);
-            printf("Using data 0x%02x %02x %02x %02x %02x (s=%d)\n",
-                   data[0], data[1], data[2], data[3], data[4], tile_size);
-            {
-                int m = vp56_rac_get_prob(&s->c, 128);
-                printf("Marker: %d\n", m);
-            }
+            if (vp56_rac_get_prob_branchy(&s->c, 128)) // marker bit
+                return AVERROR_INVALIDDATA;
             data += tile_size;
             size -= tile_size;
 
