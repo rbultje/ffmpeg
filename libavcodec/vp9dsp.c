@@ -63,6 +63,22 @@ static void vert_16x16_c(uint8_t *dst, ptrdiff_t stride,
     }
 }
 
+static void vert_32x32_c(uint8_t *dst, ptrdiff_t stride,
+                         const uint8_t *left, const uint8_t *top)
+{
+    uint64_t p8a = AV_RN64A(top + 0),  p8b = AV_RN64A(top + 8),
+             p8c = AV_RN64A(top + 16), p8d = AV_RN64A(top + 24);
+    int y;
+
+    for (y = 0; y < 32; y++) {
+        AV_WN64A(dst +  0, p8a);
+        AV_WN64A(dst +  8, p8b);
+        AV_WN64A(dst + 16, p8c);
+        AV_WN64A(dst + 24, p8d);
+        dst += stride;
+    }
+}
+
 static void hor_4x4_c(uint8_t *dst, ptrdiff_t stride,
                       const uint8_t *left, const uint8_t *top)
 {
@@ -93,6 +109,22 @@ static void hor_16x16_c(uint8_t *dst, ptrdiff_t stride,
 
         AV_WN64A(dst + 0, p8);
         AV_WN64A(dst + 8, p8);
+        dst += stride;
+    }
+}
+
+static void hor_32x32_c(uint8_t *dst, ptrdiff_t stride,
+                        const uint8_t *left, const uint8_t *top)
+{
+    int y;
+
+    for (y = 0; y < 32; y++) {
+        uint64_t p8 = left[y] * 0x0101010101010101ULL;
+
+        AV_WN64A(dst +  0, p8);
+        AV_WN64A(dst +  8, p8);
+        AV_WN64A(dst + 16, p8);
+        AV_WN64A(dst + 24, p8);
         dst += stride;
     }
 }
@@ -161,6 +193,50 @@ static void tm_16x16_c(uint8_t *dst, ptrdiff_t stride,
     }
 }
 
+static void tm_32x32_c(uint8_t *dst, ptrdiff_t stride,
+                       const uint8_t *left, const uint8_t *top)
+{
+    int y, tl = top[-1];
+
+    for (y = 0; y < 32; y++) {
+        int l_m_tl = left[y] - tl;
+
+        dst[ 0] = av_clip_uint8(top[ 0] + l_m_tl);
+        dst[ 1] = av_clip_uint8(top[ 1] + l_m_tl);
+        dst[ 2] = av_clip_uint8(top[ 2] + l_m_tl);
+        dst[ 3] = av_clip_uint8(top[ 3] + l_m_tl);
+        dst[ 4] = av_clip_uint8(top[ 4] + l_m_tl);
+        dst[ 5] = av_clip_uint8(top[ 5] + l_m_tl);
+        dst[ 6] = av_clip_uint8(top[ 6] + l_m_tl);
+        dst[ 7] = av_clip_uint8(top[ 7] + l_m_tl);
+        dst[ 8] = av_clip_uint8(top[ 8] + l_m_tl);
+        dst[ 9] = av_clip_uint8(top[ 9] + l_m_tl);
+        dst[10] = av_clip_uint8(top[10] + l_m_tl);
+        dst[11] = av_clip_uint8(top[11] + l_m_tl);
+        dst[12] = av_clip_uint8(top[12] + l_m_tl);
+        dst[13] = av_clip_uint8(top[13] + l_m_tl);
+        dst[14] = av_clip_uint8(top[14] + l_m_tl);
+        dst[15] = av_clip_uint8(top[15] + l_m_tl);
+        dst[16] = av_clip_uint8(top[16] + l_m_tl);
+        dst[17] = av_clip_uint8(top[17] + l_m_tl);
+        dst[18] = av_clip_uint8(top[18] + l_m_tl);
+        dst[19] = av_clip_uint8(top[19] + l_m_tl);
+        dst[20] = av_clip_uint8(top[20] + l_m_tl);
+        dst[21] = av_clip_uint8(top[21] + l_m_tl);
+        dst[22] = av_clip_uint8(top[22] + l_m_tl);
+        dst[23] = av_clip_uint8(top[23] + l_m_tl);
+        dst[24] = av_clip_uint8(top[24] + l_m_tl);
+        dst[25] = av_clip_uint8(top[25] + l_m_tl);
+        dst[26] = av_clip_uint8(top[26] + l_m_tl);
+        dst[27] = av_clip_uint8(top[27] + l_m_tl);
+        dst[28] = av_clip_uint8(top[28] + l_m_tl);
+        dst[29] = av_clip_uint8(top[29] + l_m_tl);
+        dst[30] = av_clip_uint8(top[30] + l_m_tl);
+        dst[31] = av_clip_uint8(top[31] + l_m_tl);
+        dst += stride;
+    }
+}
+
 static void dc_4x4_c(uint8_t *dst, ptrdiff_t stride,
                      const uint8_t *left, const uint8_t *top)
 {
@@ -206,6 +282,31 @@ static void dc_16x16_c(uint8_t *dst, ptrdiff_t stride,
     }
 }
 
+static void dc_32x32_c(uint8_t *dst, ptrdiff_t stride,
+                       const uint8_t *left, const uint8_t *top)
+{
+    uint64_t dc = 0x0101010101010101ULL *
+        ((left[0] + left[1] + left[2] + left[3] + left[4] + left[5] + left[6] +
+          left[7] + left[8] + left[9] + left[10] + left[11] + left[12] +
+          left[13] + left[14] + left[15] + left[16] + left[17] + left[18] +
+          left[19] + left[20] + left[21] + left[22] + left[23] + left[24] +
+          left[25] + left[26] + left[27] + left[28] + left[29] + left[30] +
+          left[31] + top[0] + top[1] + top[2] + top[3] + top[4] + top[5] +
+          top[6] + top[7] + top[8] + top[9] + top[10] + top[11] + top[12] +
+          top[13] + top[14] + top[15] + top[16] + top[17] + top[18] + top[19] +
+          top[20] + top[21] + top[22] + top[23] + top[24] + top[25] + top[26] +
+          top[27] + top[28] + top[29] + top[30] + top[31] + 32) >> 6);
+    int y;
+
+    for (y = 0; y < 32; y++) {
+        AV_WN64A(dst +  0, dc);
+        AV_WN64A(dst +  8, dc);
+        AV_WN64A(dst + 16, dc);
+        AV_WN64A(dst + 24, dc);
+        dst += stride;
+    }
+}
+
 static void dc_left_4x4_c(uint8_t *dst, ptrdiff_t stride,
                           const uint8_t *left, const uint8_t *top)
 {
@@ -243,6 +344,27 @@ static void dc_left_16x16_c(uint8_t *dst, ptrdiff_t stride,
     for (y = 0; y < 16; y++) {
         AV_WN64A(dst + 0, dc);
         AV_WN64A(dst + 8, dc);
+        dst += stride;
+    }
+}
+
+static void dc_left_32x32_c(uint8_t *dst, ptrdiff_t stride,
+                            const uint8_t *left, const uint8_t *top)
+{
+    uint64_t dc = 0x0101010101010101ULL *
+        ((left[0] + left[1] + left[2] + left[3] + left[4] + left[5] +
+          left[6] + left[7] + left[8] + left[9] + left[10] + left[11] +
+          left[12] + left[13] + left[14] + left[15] + left[16] + left[17] +
+          left[18] + left[19] + left[20] + left[21] + left[22] + left[23] +
+          left[24] + left[25] + left[26] + left[27] + left[28] + left[29] +
+          left[30] + left[31] + 16) >> 5);
+    int y;
+
+    for (y = 0; y < 32; y++) {
+        AV_WN64A(dst +  0, dc);
+        AV_WN64A(dst +  8, dc);
+        AV_WN64A(dst + 16, dc);
+        AV_WN64A(dst + 24, dc);
         dst += stride;
     }
 }
@@ -288,6 +410,27 @@ static void dc_top_16x16_c(uint8_t *dst, ptrdiff_t stride,
     }
 }
 
+static void dc_top_32x32_c(uint8_t *dst, ptrdiff_t stride,
+                           const uint8_t *left, const uint8_t *top)
+{
+    uint64_t dc = 0x0101010101010101ULL *
+        ((top[0] + top[1] + top[2] + top[3] + top[4] + top[5] +
+          top[6] + top[7] + top[8] + top[9] + top[10] + top[11] +
+          top[12] + top[13] + top[14] + top[15] + top[16] + top[17] +
+          top[18] + top[19] + top[20] + top[21] + top[22] + top[23] +
+          top[24] + top[25] + top[26] + top[27] + top[28] + top[29] +
+          top[30] + top[31] + 16) >> 5);
+    int y;
+
+    for (y = 0; y < 32; y++) {
+        AV_WN64A(dst +  0, dc);
+        AV_WN64A(dst +  8, dc);
+        AV_WN64A(dst + 16, dc);
+        AV_WN64A(dst + 24, dc);
+        dst += stride;
+    }
+}
+
 static void dc_128_4x4_c(uint8_t *dst, ptrdiff_t stride,
                          const uint8_t *left, const uint8_t *top)
 {
@@ -316,6 +459,20 @@ static void dc_128_16x16_c(uint8_t *dst, ptrdiff_t stride,
     for (y = 0; y < 16; y++) {
         AV_WN64A(dst + 0, 0x8080808080808080ULL);
         AV_WN64A(dst + 8, 0x8080808080808080ULL);
+        dst += stride;
+    }
+}
+
+static void dc_128_32x32_c(uint8_t *dst, ptrdiff_t stride,
+                           const uint8_t *left, const uint8_t *top)
+{
+    int y;
+
+    for (y = 0; y < 32; y++) {
+        AV_WN64A(dst +  0, 0x8080808080808080ULL);
+        AV_WN64A(dst +  8, 0x8080808080808080ULL);
+        AV_WN64A(dst + 16, 0x8080808080808080ULL);
+        AV_WN64A(dst + 24, 0x8080808080808080ULL);
         dst += stride;
     }
 }
@@ -352,6 +509,20 @@ static void dc_127_16x16_c(uint8_t *dst, ptrdiff_t stride,
     }
 }
 
+static void dc_127_32x32_c(uint8_t *dst, ptrdiff_t stride,
+                           const uint8_t *left, const uint8_t *top)
+{
+    int y;
+
+    for (y = 0; y < 32; y++) {
+        AV_WN64A(dst +  0, 0x7F7F7F7F7F7F7F7FULL);
+        AV_WN64A(dst +  8, 0x7F7F7F7F7F7F7F7FULL);
+        AV_WN64A(dst + 16, 0x7F7F7F7F7F7F7F7FULL);
+        AV_WN64A(dst + 24, 0x7F7F7F7F7F7F7F7FULL);
+        dst += stride;
+    }
+}
+
 static void dc_129_4x4_c(uint8_t *dst, ptrdiff_t stride,
                          const uint8_t *left, const uint8_t *top)
 {
@@ -380,6 +551,20 @@ static void dc_129_16x16_c(uint8_t *dst, ptrdiff_t stride,
     for (y = 0; y < 16; y++) {
         AV_WN64A(dst + 0, 0x8181818181818181ULL);
         AV_WN64A(dst + 8, 0x8181818181818181ULL);
+        dst += stride;
+    }
+}
+
+static void dc_129_32x32_c(uint8_t *dst, ptrdiff_t stride,
+                           const uint8_t *left, const uint8_t *top)
+{
+    int y;
+
+    for (y = 0; y < 32; y++) {
+        AV_WN64A(dst +  0, 0x8181818181818181ULL);
+        AV_WN64A(dst +  8, 0x8181818181818181ULL);
+        AV_WN64A(dst + 16, 0x8181818181818181ULL);
+        AV_WN64A(dst + 24, 0x8181818181818181ULL);
         dst += stride;
     }
 }
@@ -495,6 +680,12 @@ static void diag_downleft_16x16_c(uint8_t *dst, ptrdiff_t stride,
                 DST(6,15) = DST(7,15) = DST(8,15) = DST(9,15) = DST(10,15) =
                 DST(11,15) = DST(12,15) = DST(13,15) = DST(14,15) =
                 DST(15,15) = a15;
+}
+
+static void diag_downleft_32x32_c(uint8_t *dst, ptrdiff_t stride,
+                                  const uint8_t *left, const uint8_t *top)
+{
+    //..
 }
 
 static void diag_downright_4x4_c(uint8_t *dst, ptrdiff_t stride,
@@ -626,6 +817,12 @@ static void diag_downright_16x16_c(uint8_t *dst, ptrdiff_t stride,
     DST(13,0) = DST(14,1) = DST(15,2) = (a11 + a12 * 2 + a13 + 2) >> 2;
     DST(14,0) = DST(15,1) = (a12 + a13 * 2 + a14 + 2) >> 2;
     DST(15,0) = (a13 + a14 * 2 + a15 + 2) >> 2;
+}
+
+static void diag_downright_32x32_c(uint8_t *dst, ptrdiff_t stride,
+                                   const uint8_t *left, const uint8_t *top)
+{
+    //..
 }
 
 static void vert_right_4x4_c(uint8_t *dst, ptrdiff_t stride,
@@ -768,6 +965,12 @@ static void vert_right_16x16_c(uint8_t *dst, ptrdiff_t stride,
     DST(15,1) = (a13 + a14 * 2 + a15 + 2) >> 2;
 }
 
+static void vert_right_32x32_c(uint8_t *dst, ptrdiff_t stride,
+                               const uint8_t *left, const uint8_t *top)
+{
+    //..
+}
+
 static void hor_down_4x4_c(uint8_t *dst, ptrdiff_t stride,
                            const uint8_t *left, const uint8_t *top)
 {
@@ -908,6 +1111,12 @@ static void hor_down_16x16_c(uint8_t *dst, ptrdiff_t stride,
     DST(1,15) = (l13 + l14 * 2 + l15 + 2) >> 2;
 }
 
+static void hor_down_32x32_c(uint8_t *dst, ptrdiff_t stride,
+                             const uint8_t *left, const uint8_t *top)
+{
+    //..
+}
+
 static void vert_left_4x4_c(uint8_t *dst, ptrdiff_t stride,
                             const uint8_t *left, const uint8_t *top)
 {
@@ -1029,6 +1238,12 @@ static void vert_left_16x16_c(uint8_t *dst, ptrdiff_t stride,
                 DST(15,15) = a15;
 }
 
+static void vert_left_32x32_c(uint8_t *dst, ptrdiff_t stride,
+                              const uint8_t *left, const uint8_t *top)
+{
+    //..
+}
+
 static void hor_up_4x4_c(uint8_t *dst, ptrdiff_t stride,
                          const uint8_t *left, const uint8_t *top)
 {
@@ -1146,6 +1361,12 @@ static void hor_up_16x16_c(uint8_t *dst, ptrdiff_t stride,
                 DST(15,15) = l15;
 }
 
+static void hor_up_32x32_c(uint8_t *dst, ptrdiff_t stride,
+                           const uint8_t *left, const uint8_t *top)
+{
+    //..
+}
+
 #undef DST
 
 static void vp9dsp_intrapred_init(VP9DSPContext *dsp)
@@ -1170,8 +1391,7 @@ static void vp9dsp_intrapred_init(VP9DSPContext *dsp)
     init_intra_pred(TX_4X4,   4x4);
     init_intra_pred(TX_8X8,   8x8);
     init_intra_pred(TX_16X16, 16x16);
-    // FIXME
-    //init_intra_pred(TX_32X32, 32x32);
+    init_intra_pred(TX_32X32, 32x32);
 
 #undef init_intra_pred
 }
