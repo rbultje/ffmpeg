@@ -1307,8 +1307,20 @@ static int decode_b(AVCodecContext *ctx, int row, int col, ptrdiff_t yoff,
     if ((res = decode_mode(ctx, row, col, &b)) < 0)
         return res;
     printf("Post mode r=%d\n", s->c.high);
-    if (!b.skip && (res = decode_coeffs(ctx, &b, row, col)) < 0)
-        return res;
+    if (!b.skip) {
+        if ((res = decode_coeffs(ctx, &b, row, col)) < 0)
+            return res;
+    } else {
+        int w4 = bwh_tab[b.bl + 1][b.bp][0];
+        int h4 = bwh_tab[b.bl + 1][b.bp][1], pl;
+
+        memset(&s->above_y_nnz_ctx[col * 2], 0, w4 * 2);
+        memset(&s->left_y_nnz_ctx[(row & 7) << 1], 0, h4 * 2);
+        for (pl = 0; pl < 2; pl++) {
+            memset(&s->above_uv_nnz_ctx[pl][col], 0, w4);
+            memset(&s->left_uv_nnz_ctx[pl][row & 7], 0, h4);
+        }
+    }
     // FIXME inter predict
     intra_recon(ctx, &b, row, col, yoff, uvoff);
 
