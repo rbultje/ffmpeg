@@ -1054,7 +1054,7 @@ static void hor_up_8x8_c(uint8_t *dst, ptrdiff_t stride,
     DST(0,1) = DST(2,0) = (l1 + l2 + 1) >> 1;
     DST(1,1) = DST(3,0) = (l1 + l2 * 2 + l3 + 2) >> 2;
     DST(0,2) = DST(2,1) = DST(4,0) = (l2 + l3 + 1) >> 1;
-    DST(1,2) = DST(3,1) = DST(5,0) = (l2 + l3 * 3 + 2) >> 2;
+    DST(1,2) = DST(3,1) = DST(5,0) = (l2 + l3 * 2 + l4 + 2) >> 2;
     DST(0,3) = DST(2,2) = DST(4,1) = DST(6,0) = (l3 + l4 + 1) >> 1;
     DST(1,3) = DST(3,2) = DST(5,1) = DST(7,0) = (l3 + l4 * 2 + l5 + 2) >> 2;
     DST(0,4) = DST(2,3) = DST(4,2) = DST(6,1) = (l4 + l5 + 1) >> 1;
@@ -1082,7 +1082,7 @@ static void hor_up_16x16_c(uint8_t *dst, ptrdiff_t stride,
     DST(0,1)  = DST(2,0)  = (l1 + l2 + 1) >> 1;
     DST(1,1)  = DST(3,0)  = (l1 + l2 * 2 + l3 + 2) >> 2;
     DST(0,2)  = DST(2,1)  = DST(4,0)  = (l2 + l3 + 1) >> 1;
-    DST(1,2)  = DST(3,1)  = DST(5,0)  = (l2 + l3 * 3 + 2) >> 2;
+    DST(1,2)  = DST(3,1)  = DST(5,0)  = (l2 + l3 * 2 + l4 + 2) >> 2;
     DST(0,3)  = DST(2,2)  = DST(4,1)  = DST(6,0)  = (l3 + l4 + 1) >> 1;
     DST(1,3)  = DST(3,2)  = DST(5,1)  = DST(7,0)  = (l3 + l4 * 2 + l5 + 2) >> 2;
     DST(0,4)  = DST(2,3)  = DST(4,2)  = DST(6,1)  =
