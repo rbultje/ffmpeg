@@ -649,9 +649,9 @@ static void diag_downleft_16x16_c(uint8_t *dst, ptrdiff_t stride,
                 DST(7,6)  = DST(6,7)  = DST(5,8)  = DST(4,9)  = DST(3,10) =
                 DST(2,11) = DST(1,12) = DST(0,13) = (a13 + a14 * 2 + a15 + 2) >> 2;
     DST(14,0) = DST(13,1) = DST(12,2) = DST(11,3) = DST(10,4) = DST(9,5)  =
-                DST(8,6)  = DST(7,7)  = DST(8,6)  = DST(9,5)  = DST(10,4) =
-                DST(11,3) = DST(12,2) = DST(13,1) =
-                DST(14,0) = (a14 + a15 * 3 + 2) >> 2;
+                DST(8,6)  = DST(7,7)  = DST(6,8)  = DST(5,9)  = DST(4,10) =
+                DST(3,11) = DST(2,12) = DST(1,13) =
+                DST(0,14) = (a14 + a15 * 3 + 2) >> 2;
     DST(15,0) = DST(14,1) = DST(15,1) = DST(13,2) = DST(14,2) = DST(15,2) =
                 DST(12,3) = DST(13,3) = DST(14,3) = DST(15,3) = DST(11,4) =
                 DST(12,4) = DST(13,4) = DST(14,4) = DST(15,4) = DST(10,5) =
@@ -1188,7 +1188,7 @@ static void vert_left_16x16_c(uint8_t *dst, ptrdiff_t stride,
     DST(6,0)  = DST(5,2)  = DST(4,4)  = DST(3,6)  = DST(2,8)  = DST(1,10) =
                 DST(0,12) = (a6 + a7 + 1) >> 1;
     DST(6,1)  = DST(5,3)  = DST(4,5)  = DST(3,7)  = DST(2,9)  = DST(1,11) =
-                DST(0,13) = (a6 + a7 * 3 + 2) >> 2;
+                DST(0,13) = (a6 + a7 * 2 + a8 + 2) >> 2;
     DST(7,0)  = DST(6,2)  = DST(5,4)  = DST(4,6)  = DST(3,8)  = DST(2,10) =
                 DST(1,12) = DST(0,14) = (a7 + a8 + 1) >> 1;
     DST(7,1)  = DST(6,3)  = DST(5,5)  = DST(4,7)  = DST(3,9)  = DST(2,11) =
