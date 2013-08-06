@@ -1444,8 +1444,8 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
             uvoff2 = uvoff + s->tiling.tile_col_start * 4;
             for (row = s->tiling.tile_row_start;
                  row < s->tiling.tile_row_end;
-                 row += 8, yoff2 += s->f->linesize[0] * 8,
-                 uvoff2 += s->f->linesize[1] * 4) {
+                 row += 8, yoff2 += s->f->linesize[0] * 64,
+                 uvoff2 += s->f->linesize[1] * 32) {
                 ptrdiff_t yoff3 = yoff2, uvoff3 = uvoff2;
                 memset(s->left_partition_ctx, 0, 8);
                 memset(s->left_skip_ctx, 0, 8);
@@ -1455,7 +1455,7 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
                 // FIXME clear left context
                 for (col = s->tiling.tile_col_start;
                      col  < s->tiling.tile_col_end;
-                     col += 8, yoff3 += 8, uvoff3 += 4) {
+                     col += 8, yoff3 += 64, uvoff3 += 32) {
                     if ((res = decode_sb(ctx, row, col,
                                          yoff3, uvoff3, BL_64X64)) < 0)
                         return res;
