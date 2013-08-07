@@ -525,7 +525,7 @@ static int decode_frame_header(AVCodecContext *ctx,
                             uint8_t *p = s->prob.coef[i][j][k][l][m];
                             uint8_t *r = ref[j][k][l][m];
                             if (m >= 3 && l == 0) // dc only has 3 pt
-                                continue;
+                                break;
                             for (n = 0; n < 3; n++) {
                                 if (vp56_rac_get_prob_branchy(&s->c, 252)) {
                                     p[n] = update_prob(&s->c, r[n]);
@@ -543,7 +543,7 @@ static int decode_frame_header(AVCodecContext *ctx,
                             uint8_t *p = s->prob.coef[i][j][k][l][m];
                             uint8_t *r = ref[j][k][l][m];
                             if (m > 3 && l == 0) // dc only has 3 pt
-                                continue;
+                                break;
                             memcpy(p, r, 3);
                             p[3] = 0;
                         }
@@ -1388,6 +1388,53 @@ static void set_tile_offset(int *start, int *end, int idx, int log2_n, int n)
     *end   = FFMIN(sb_end,   n) << 3;
 }
 
+static av_always_inline int adapt_prob(int p1, unsigned ct0, unsigned ct1,
+                                       int max_count, int update_factor)
+{
+    unsigned ct = ct0 + ct1, p2;
+
+    if (!ct)
+        return p1;
+
+    p2 = ((ct0 << 8) + (ct >> 1)) / ct;
+    p2 = FFMAX(p2, 1);
+    ct = FFMIN(ct, max_count);
+    update_factor = FASTDIV(update_factor * ct, max_count);
+
+    // (p1 * (256 - update_factor) + p2 * update_factor + 128) >> 8
+    return p1 + (((p2 - p1) * update_factor + 128) >> 8);
+}
+
+static void adapt_probs(VP9Context *s)
+{
+    int i, j, k, l, m;
+
+    for (i = 0; i < 4; i++)
+        for (j = 0; j < 2; j++)
+            for (k = 0; k < 2; k++)
+                for (l = 0; l < 6; l++)
+                    for (m = 0; m < 6; m++) {
+                        uint8_t *p = s->prob_ctx[s->framectxid].coef[i][j][k][l][m];
+                        unsigned *e = s->counts.eob[i][j][k][l][m];
+                        unsigned *c = s->counts.coef[i][j][k][l][m];
+
+                        if (l == 0 && m >= 3) // dc only has 3 pt
+                            break;
+
+                        // FIXME make '112' configurable b/c it's different
+                        // for keyframes, non-keyframes directly following
+                        // a keyframe, and subsequent non-keyframes
+                        p[0] = adapt_prob(p[0], e[0], e[1], 24, 112);
+                        p[1] = adapt_prob(p[1], c[0], c[1] + c[2], 24, 112);
+                        p[2] = adapt_prob(p[2], c[1], c[2], 24, 112);
+                    }
+
+    if (s->keyframe || s->intraonly)
+        return;
+
+    // FIXME all other mode probability updates go here
+}
+
 static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
                             int *got_frame, const uint8_t *data, int size)
 {
@@ -1466,7 +1513,26 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
         }
     }
 
-    // FIXME bw adaptivity, ref frame setup
+    // bw adaptivity (or in case of parallel decoding mode, fw adaptivity
+    // probability maintenance between frames)
+    if (s->refreshctx) {
+        if (s->parallelmode) {
+            int i, j, k, l, m;
+
+            for (i = 0; i < 4; i++)
+                for (j = 0; j < 2; j++)
+                    for (k = 0; k < 2; k++)
+                        for (l = 0; l < 6; l++)
+                            for (m = 0; m < 6; m++)
+                                memcpy(s->prob_ctx[s->framectxid].coef[i][j][k][l][m],
+                                       s->prob.coef[i][j][k][l][m], 3);
+            s->prob_ctx[s->framectxid].p = s->prob.p;
+        } else {
+            adapt_probs(s);
+        }
+    }
+
+    // FIXME ref frame setup
 
     if (!s->invisible) {
         if ((res = av_frame_ref(out_pic, s->f)) < 0)
