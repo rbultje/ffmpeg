@@ -1096,78 +1096,35 @@ static av_always_inline int check_intra_mode(int mode, uint8_t **a,
             }
         }
     };
-    static const uint8_t needs_left[N_INTRA_PRED_MODES] = {
-        [VERT_PRED]            = 0,
-        [HOR_PRED]             = 1,
-        [DC_PRED]              = 1,
-        [DIAG_DOWN_LEFT_PRED]  = 0,
-        [DIAG_DOWN_RIGHT_PRED] = 1,
-        [VERT_RIGHT_PRED]      = 1,
-        [HOR_DOWN_PRED]        = 1,
-        [VERT_LEFT_PRED]       = 0,
-        [HOR_UP_PRED]          = 1,
-        [TM_VP8_PRED]          = 1,
-        [LEFT_DC_PRED]         = 1,
-        [TOP_DC_PRED]          = 0,
-        [DC_128_PRED]          = 0,
-        [DC_127_PRED]          = 0,
-        [DC_129_PRED]          = 0,
-    }, needs_top[N_INTRA_PRED_MODES] = {
-        [VERT_PRED]            = 1,
-        [HOR_PRED]             = 0,
-        [DC_PRED]              = 1,
-        [DIAG_DOWN_LEFT_PRED]  = 1,
-        [DIAG_DOWN_RIGHT_PRED] = 1,
-        [VERT_RIGHT_PRED]      = 1,
-        [HOR_DOWN_PRED]        = 1,
-        [VERT_LEFT_PRED]       = 1,
-        [HOR_UP_PRED]          = 0,
-        [TM_VP8_PRED]          = 1,
-        [LEFT_DC_PRED]         = 0,
-        [TOP_DC_PRED]          = 1,
-        [DC_128_PRED]          = 0,
-        [DC_127_PRED]          = 0,
-        [DC_129_PRED]          = 0,
-    }, needs_topleft[N_INTRA_PRED_MODES] = {
-        [VERT_PRED]            = 0,
-        [HOR_PRED]             = 0,
-        [DC_PRED]              = 0,
-        [DIAG_DOWN_LEFT_PRED]  = 0,
-        [DIAG_DOWN_RIGHT_PRED] = 1,
-        [VERT_RIGHT_PRED]      = 1,
-        [HOR_DOWN_PRED]        = 1,
-        [VERT_LEFT_PRED]       = 0,
-        [HOR_UP_PRED]          = 0,
-        [TM_VP8_PRED]          = 1,
-        [LEFT_DC_PRED]         = 0,
-        [TOP_DC_PRED]          = 0,
-        [DC_128_PRED]          = 0,
-        [DC_127_PRED]          = 0,
-        [DC_129_PRED]          = 0,
-    }, needs_topright[N_INTRA_PRED_MODES] = {
-        [VERT_PRED]            = 0,
-        [HOR_PRED]             = 0,
-        [DC_PRED]              = 0,
-        [DIAG_DOWN_LEFT_PRED]  = 1,
-        [DIAG_DOWN_RIGHT_PRED] = 0,
-        [VERT_RIGHT_PRED]      = 0,
-        [HOR_DOWN_PRED]        = 0,
-        [VERT_LEFT_PRED]       = 1,
-        [HOR_UP_PRED]          = 0,
-        [TM_VP8_PRED]          = 0,
-        [LEFT_DC_PRED]         = 0,
-        [TOP_DC_PRED]          = 0,
-        [DC_128_PRED]          = 0,
-        [DC_127_PRED]          = 0,
-        [DC_129_PRED]          = 0,
+    static const struct {
+        uint8_t needs_left:1;
+        uint8_t needs_top:1;
+        uint8_t needs_topleft:1;
+        uint8_t needs_topright:1;
+    } edges[N_INTRA_PRED_MODES] = {
+        [VERT_PRED]            = { .needs_top  = 1 },
+        [HOR_PRED]             = { .needs_left = 1 },
+        [DC_PRED]              = { .needs_top  = 1, .needs_left = 1 },
+        [DIAG_DOWN_LEFT_PRED]  = { .needs_top  = 1, .needs_topright = 1 },
+        [DIAG_DOWN_RIGHT_PRED] = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1 },
+        [VERT_RIGHT_PRED]      = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1 },
+        [HOR_DOWN_PRED]        = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1 },
+        [VERT_LEFT_PRED]       = { .needs_top  = 1, .needs_topright = 1 },
+        [HOR_UP_PRED]          = { .needs_left = 1 },
+        [TM_VP8_PRED]          = { .needs_left = 1, .needs_top = 1, .needs_topleft = 1 },
+        [LEFT_DC_PRED]         = { .needs_left = 1 },
+        [TOP_DC_PRED]          = { .needs_top  = 1 },
+        [DC_128_PRED]          = { 0 },
+        [DC_127_PRED]          = { 0 },
+        [DC_129_PRED]          = { 0 }
     };
 
     assert(mode >= 0 && mode < 10);
     mode = mode_conv[have_left][have_top][mode];
-    if (needs_top[mode]) {
+    if (edges[mode].needs_top) {
         if (have_top &&
-            (!needs_topleft[mode] || have_left) &&
-            (tx != TX_4X4 || !needs_topright[mode] || have_topright)) {
+            (!edges[mode].needs_topleft || have_left) &&
+            (tx != TX_4X4 || !edges[mode].needs_topright || have_topright)) {
             *a = &dst[-stride];
         } else {
             if (have_top) {
@@ -1175,14 +1132,14 @@ static av_always_inline int check_intra_mode(int mode, uint8_t **a,
             } else {
                 memset(*a, 127, 4 << tx);
             }
-            if (needs_topleft[mode]) {
+            if (edges[mode].needs_topleft) {
                 if (have_left && have_top) {
                     (*a)[-1] = dst[-stride - 1];
                 } else {
                     (*a)[-1] = have_top ? 129 : 127;
                 }
             }
-            if (tx == TX_4X4 && needs_topright[mode]) {
+            if (tx == TX_4X4 && edges[mode].needs_topright) {
                 if (have_topright) {
                     memcpy(&(*a)[4], &dst[4 - stride], 4);
                 } else {
@@ -1191,7 +1148,7 @@ static av_always_inline int check_intra_mode(int mode, uint8_t **a,
             }
         }
     }
-    if (needs_left[mode]) {
+    if (edges[mode].needs_left) {
         if (have_left) {
             int i;
 
