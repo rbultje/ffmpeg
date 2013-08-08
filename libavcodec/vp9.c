@@ -1045,56 +1045,27 @@ static av_always_inline int check_intra_mode(int mode, uint8_t **a,
 {
     // FIXME make work with tiling enabled (have_left check is wrong)
     int have_top = y > 0, have_left = col * 2 + x > 0, have_topright = x < w - 1;
-    static const uint8_t mode_conv[2][2][10] = {
-        { /* have_left = 0 */
-           { /* have_top = 0 */
-               [VERT_PRED]            = DC_127_PRED,
-               [HOR_PRED]             = DC_129_PRED,
-               [DC_PRED]              = DC_128_PRED,
-               [DIAG_DOWN_LEFT_PRED]  = DC_127_PRED,
-               [DIAG_DOWN_RIGHT_PRED] = DIAG_DOWN_RIGHT_PRED,
-               [VERT_RIGHT_PRED]      = VERT_RIGHT_PRED,
-               [HOR_DOWN_PRED]        = HOR_DOWN_PRED,
-               [VERT_LEFT_PRED]       = DC_127_PRED,
-               [HOR_UP_PRED]          = DC_129_PRED,
-               [TM_VP8_PRED]          = DC_129_PRED,
-           }, { /* have_top = 1 */
-               [VERT_PRED]            = VERT_PRED,
-               [HOR_PRED]             = DC_129_PRED,
-               [DC_PRED]              = TOP_DC_PRED,
-               [DIAG_DOWN_LEFT_PRED]  = DIAG_DOWN_LEFT_PRED,
-               [DIAG_DOWN_RIGHT_PRED] = DIAG_DOWN_RIGHT_PRED,
-               [VERT_RIGHT_PRED]      = VERT_RIGHT_PRED,
-               [HOR_DOWN_PRED]        = HOR_DOWN_PRED,
-               [VERT_LEFT_PRED]       = VERT_LEFT_PRED,
-               [HOR_UP_PRED]          = DC_129_PRED,
-               [TM_VP8_PRED]          = VERT_PRED,
-           }
-        }, { /* have_left = 1 */
-            { /* have_top = 0 */
-                [VERT_PRED]            = DC_127_PRED,
-                [HOR_PRED]             = HOR_PRED,
-                [DC_PRED]              = LEFT_DC_PRED,
-                [DIAG_DOWN_LEFT_PRED]  = DC_127_PRED,
-                [DIAG_DOWN_RIGHT_PRED] = DIAG_DOWN_RIGHT_PRED,
-                [VERT_RIGHT_PRED]      = VERT_RIGHT_PRED,
-                [HOR_DOWN_PRED]        = HOR_DOWN_PRED,
-                [VERT_LEFT_PRED]       = DC_127_PRED,
-                [HOR_UP_PRED]          = HOR_UP_PRED,
-                [TM_VP8_PRED]          = HOR_PRED,
-            }, { /* have_top = 1 */
-                [VERT_PRED]            = VERT_PRED,
-                [HOR_PRED]             = HOR_PRED,
-                [DC_PRED]              = DC_PRED,
-                [DIAG_DOWN_LEFT_PRED]  = DIAG_DOWN_LEFT_PRED,
-                [DIAG_DOWN_RIGHT_PRED] = DIAG_DOWN_RIGHT_PRED,
-                [VERT_RIGHT_PRED]      = VERT_RIGHT_PRED,
-                [HOR_DOWN_PRED]        = HOR_DOWN_PRED,
-                [VERT_LEFT_PRED]       = VERT_LEFT_PRED,
-                [HOR_UP_PRED]          = HOR_UP_PRED,
-                [TM_VP8_PRED]          = TM_VP8_PRED,
-            }
-        }
+    static const uint8_t mode_conv[10][2 /* have_left */][2 /* have_top */] = {
+        [VERT_PRED]            = { { DC_127_PRED,          VERT_PRED },
+                                   { DC_127_PRED,          VERT_PRED } },
+        [HOR_PRED]             = { { DC_129_PRED,          DC_129_PRED },
+                                   { HOR_PRED,             HOR_PRED } },
+        [DC_PRED]              = { { DC_128_PRED,          TOP_DC_PRED },
+                                   { LEFT_DC_PRED,         DC_PRED } },
+        [DIAG_DOWN_LEFT_PRED]  = { { DC_127_PRED,          DIAG_DOWN_LEFT_PRED },
+                                   { DC_127_PRED,          DIAG_DOWN_LEFT_PRED } },
+        [DIAG_DOWN_RIGHT_PRED] = { { DIAG_DOWN_RIGHT_PRED, DIAG_DOWN_RIGHT_PRED },
+                                   { DIAG_DOWN_RIGHT_PRED, DIAG_DOWN_RIGHT_PRED } },
+        [VERT_RIGHT_PRED]      = { { VERT_RIGHT_PRED,      VERT_RIGHT_PRED },
+                                   { VERT_RIGHT_PRED,      VERT_RIGHT_PRED } },
+        [HOR_DOWN_PRED]        = { { HOR_DOWN_PRED,        HOR_DOWN_PRED },
+                                   { HOR_DOWN_PRED,        HOR_DOWN_PRED } },
+        [VERT_LEFT_PRED]       = { { DC_127_PRED,          VERT_LEFT_PRED },
+                                   { DC_127_PRED,          VERT_LEFT_PRED } },
+        [HOR_UP_PRED]          = { { DC_129_PRED,          DC_129_PRED },
+                                   { HOR_UP_PRED,          HOR_UP_PRED } },
+        [TM_VP8_PRED]          = { { DC_129_PRED,          VERT_PRED },
+                                   { HOR_PRED,             TM_VP8_PRED } },
     };
     static const struct {
         uint8_t needs_left:1;
@@ -1120,7 +1091,7 @@ static av_always_inline int check_intra_mode(int mode, uint8_t **a,
     };
 
     assert(mode >= 0 && mode < 10);
-    mode = mode_conv[have_left][have_top][mode];
+    mode = mode_conv[mode][have_left][have_top];
     if (edges[mode].needs_top) {
         if (have_top &&
             (!edges[mode].needs_topleft || have_left) &&
