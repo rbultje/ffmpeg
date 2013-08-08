@@ -199,7 +199,7 @@ static av_always_inline int get_sbits_inv(GetBitContext *gb, int n)
 
 static av_always_inline int inv_recenter_nonneg(int v, int m)
 {
-    return v > 2 * m ? v : v & 1 ? m - (v + 1) / 2 : m + v / 2;
+    return v > 2 * m ? v : v & 1 ? m - ((v + 1) >> 1) : m + (v >> 1);
 }
 
 // differential forward probability updates
