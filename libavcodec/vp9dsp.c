@@ -133,10 +133,10 @@ static void tm_4x4_c(uint8_t *dst, ptrdiff_t stride,
                      const uint8_t *left, const uint8_t *top)
 {
     int y, tl = top[-1];
-    
+
     for (y = 0; y < 4; y++) {
         int l_m_tl = left[y] - tl;
-        
+
         dst[0] = av_clip_uint8(top[0] + l_m_tl);
         dst[1] = av_clip_uint8(top[1] + l_m_tl);
         dst[2] = av_clip_uint8(top[2] + l_m_tl);
@@ -311,7 +311,7 @@ static void dc_left_4x4_c(uint8_t *dst, ptrdiff_t stride,
                           const uint8_t *left, const uint8_t *top)
 {
     unsigned dc = 0x01010101U * ((left[0] + left[1] + left[2] + left[3] + 2) >> 2);
-    
+
     AV_WN32A(dst + stride * 0, dc);
     AV_WN32A(dst + stride * 1, dc);
     AV_WN32A(dst + stride * 2, dc);
@@ -373,7 +373,7 @@ static void dc_top_4x4_c(uint8_t *dst, ptrdiff_t stride,
                          const uint8_t *left, const uint8_t *top)
 {
     unsigned dc = 0x01010101U * ((top[0] + top[1] + top[2] + top[3] + 2) >> 2);
-    
+
     AV_WN32A(dst + stride * 0, dc);
     AV_WN32A(dst + stride * 1, dc);
     AV_WN32A(dst + stride * 2, dc);
@@ -1122,7 +1122,7 @@ static void vert_left_4x4_c(uint8_t *dst, ptrdiff_t stride,
 {
     int a0 = top[0], a1 = top[1], a2 = top[2], a3 = top[3],
         a4 = top[4], a5 = top[5], a6 = top[6];
-    
+
     DST(0,0) = (a0 + a1 + 1) >> 1;
     DST(0,1) = (a0 + a1 * 2 + a2 + 2) >> 2;
     DST(1,0) = DST(0,2) = (a1 + a2 + 1) >> 1;
@@ -1278,7 +1278,7 @@ static void hor_up_8x8_c(uint8_t *dst, ptrdiff_t stride,
     DST(1,5) = DST(3,4) = DST(5,3) = DST(7,2) = (l5 + l6 * 2 + l7 + 2) >> 2;
     DST(0,6) = DST(2,5) = DST(4,4) = DST(6,3) = (l6 + l7 + 1) >> 1;
     DST(1,6) = DST(3,5) = DST(5,4) = DST(7,3) = (l6 + l7 * 3 + 2) >> 2;
-    DST(0,7) = DST(1,7) = DST(2,6) = DST(2,7) = DST(3,6) = DST(3,7) = 
+    DST(0,7) = DST(1,7) = DST(2,6) = DST(2,7) = DST(3,6) = DST(3,7) =
                DST(4,5) = DST(4,6) = DST(4,7) = DST(5,5) = DST(5,6) =
                DST(5,7) = DST(6,4) = DST(6,5) = DST(6,6) = DST(6,7) =
                DST(7,4) = DST(7,5) = DST(7,6) = DST(7,7) = l7;
@@ -1344,7 +1344,7 @@ static void hor_up_16x16_c(uint8_t *dst, ptrdiff_t stride,
                 DST(12,8) = DST(14,7) = (l14 + l15 + 1) >> 1;
     DST(1,14) = DST(3,13) = DST(5,12) = DST(7,11) = DST(9,10) = DST(11,9) =
                 DST(13,8) = DST(15,7) = (l14 + l15 * 3 + 2) >> 2;
-    DST(0,15) = DST(1,15) = DST(2,14) = DST(2,15) = DST(3,14) = DST(3,15) = 
+    DST(0,15) = DST(1,15) = DST(2,14) = DST(2,15) = DST(3,14) = DST(3,15) =
                 DST(4,13) = DST(4,14) = DST(4,15) = DST(5,13) = DST(5,14) =
                 DST(5,15) = DST(6,12) = DST(6,13) = DST(6,14) = DST(6,15) =
                 DST(7,12) = DST(7,13) = DST(7,14) = DST(7,15) = DST(8,11) =
