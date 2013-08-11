@@ -1311,7 +1311,7 @@ static void hor_up_16x16_c(uint8_t *dst, ptrdiff_t stride,
     DST(0,6)  = DST(2,5)  = DST(4,4)  = DST(6,3)  = DST(8,2)  = DST(10,1) =
                 DST(12,0) = (l6 + l7 + 1) >> 1;
     DST(1,6)  = DST(3,5)  = DST(5,4)  = DST(7,3)  = DST(9,2)  = DST(11,1) =
-                DST(13,0) = (l6 + l7 * 3 + 2) >> 2;
+                DST(13,0) = (l6 + l7 * 2 + l8 + 2) >> 2;
     DST(0,7)  = DST(2,6)  = DST(4,5)  = DST(6,4)  = DST(8,3)  = DST(10,2) =
                 DST(12,1) = DST(14,0) = (l7 + l8 + 1) >> 1;
     DST(1,7)  = DST(3,6)  = DST(5,5)  = DST(7,4)  = DST(9,3)  = DST(11,2) =
