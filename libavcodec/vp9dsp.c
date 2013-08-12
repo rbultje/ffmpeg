@@ -2001,8 +2001,134 @@ static void vp9dsp_itxfm_init(VP9DSPContext *dsp)
 #undef init_idct
 }
 
+static av_always_inline void loop_filter(uint8_t *dst,  ptrdiff_t stride,
+                                         int E, int I, int H,
+                                         ptrdiff_t stridea, ptrdiff_t strideb,
+                                         int wd, int sz)
+{
+    int i;
+
+    for (i = 0; i < sz; i++, dst += stridea) {
+        int p7 = dst[strideb * -8], p6 = dst[strideb * -7];
+        int p5 = dst[strideb * -6], p4 = dst[strideb * -5];
+        int p3 = dst[strideb * -4], p2 = dst[strideb * -3];
+        int p1 = dst[strideb * -2], p0 = dst[strideb * -1];
+        int q0 = dst[strideb * +0], q1 = dst[strideb * +1];
+        int q2 = dst[strideb * +2], q3 = dst[strideb * +3];
+        int q4 = dst[strideb * +4], q5 = dst[strideb * +5];
+        int q6 = dst[strideb * +6], q7 = dst[strideb * +7];
+        int fm = FFABS(p3 - p2) <= I && FFABS(p2 - p1) <= I &&
+                 FFABS(p1 - p0) <= I && FFABS(q1 - q0) <= I &&
+                 FFABS(q2 - q1) <= I && FFABS(q3 - q2) <= I &&
+                 FFABS(p0 - q0) * 2 + (FFABS(p1 - q1) >> 1) <= E;
+        int flat8out, flat8in;
+
+        if (!fm)
+            continue;
+
+        if (wd >= 16)
+            flat8out = FFABS(p7 - p0) <= 1 && FFABS(p6 - p0) <= 1 &&
+                       FFABS(p5 - p0) <= 1 && FFABS(p4 - p0) <= 1 &&
+                       FFABS(q4 - q0) <= 1 && FFABS(q5 - q0) <= 1 &&
+                       FFABS(q6 - q0) <= 1 && FFABS(q7 - q0) <= 1;
+        if (wd >= 8)
+            flat8in = FFABS(p3 - p0) <= 1 && FFABS(p2 - p0) <= 1 &&
+                      FFABS(p1 - p0) <= 1 && FFABS(q1 - q0) <= 1 &&
+                      FFABS(q2 - q0) <= 1 && FFABS(q3 - q0) <= 1;
+
+        if (wd >= 16 && flat8out && flat8in) {
+            dst[strideb * -7] = (p7 + p7 + p7 + p7 + p7 + p7 + p7 + p6 * 2 +
+                                 p5 + p4 + p3 + p2 + p1 + p0 + q0 + 8) >> 4;
+            dst[strideb * -6] = (p7 + p7 + p7 + p7 + p7 + p7 + p6 + p5 * 2 +
+                                 p4 + p3 + p2 + p1 + p0 + q0 + q1 + 8) >> 4;
+            dst[strideb * -5] = (p7 + p7 + p7 + p7 + p7 + p6 + p5 + p4 * 2 +
+                                 p3 + p2 + p1 + p0 + q0 + q1 + q2 + 8) >> 4;
+            dst[strideb * -4] = (p7 + p7 + p7 + p7 + p6 + p5 + p4 + p3 * 2 +
+                                 p2 + p1 + p0 + q0 + q1 + q2 + q3 + 8) >> 4;
+            dst[strideb * -3] = (p7 + p7 + p7 + p6 + p5 + p4 + p3 + p2 * 2 +
+                                 p1 + p0 + q0 + q1 + q2 + q3 + q4 + 8) >> 4;
+            dst[strideb * -2] = (p7 + p7 + p6 + p5 + p4 + p3 + p2 + p1 * 2 +
+                                 p0 + q0 + q1 + q2 + q3 + q4 + q5 + 8) >> 4;
+            dst[strideb * -1] = (p7 + p6 + p5 + p4 + p3 + p2 + p1 + p0 * 2 +
+                                 q0 + q1 + q2 + q3 + q4 + q5 + q6 + 8) >> 4;
+            dst[strideb * +0] = (p6 + p5 + p4 + p3 + p2 + p1 + p0 + q0 * 2 +
+                                 q1 + q2 + q3 + q4 + q5 + q6 + q7 + 8) >> 4;
+            dst[strideb * +1] = (p5 + p4 + p3 + p2 + p1 + p0 + q0 + q1 * 2 +
+                                 q2 + q3 + q4 + q5 + q6 + q7 + q7 + 8) >> 4;
+            dst[strideb * +2] = (p4 + p3 + p2 + p1 + p0 + q0 + q1 + q2 * 2 +
+                                 q3 + q4 + q5 + q6 + q7 + q7 + q7 + 8) >> 4;
+            dst[strideb * +3] = (p3 + p2 + p1 + p0 + q0 + q1 + q2 + q3 * 2 +
+                                 q4 + q5 + q6 + q7 + q7 + q7 + q7 + 8) >> 4;
+            dst[strideb * +4] = (p2 + p1 + p0 + q0 + q1 + q2 + q3 + q4 * 2 +
+                                 q5 + q6 + q7 + q7 + q7 + q7 + q7 + 8) >> 4;
+            dst[strideb * +5] = (p1 + p0 + q0 + q1 + q2 + q3 + q4 + q5 * 2 +
+                                 q6 + q7 + q7 + q7 + q7 + q7 + q7 + 8) >> 4;
+            dst[strideb * +6] = (p0 + q0 + q1 + q2 + q3 + q4 + q5 + q6 * 2 +
+                                 q7 + q7 + q7 + q7 + q7 + q7 + q7 + 8) >> 4;
+        } else if (wd >= 8 && flat8in) {
+            dst[strideb * -3] = (p3 + p3 + p3 + 2 * p2 + p1 + p0 + q0 + 4) >> 3;
+            dst[strideb * -2] = (p3 + p3 + p2 + 2 * p1 + p0 + q0 + q1 + 4) >> 3;
+            dst[strideb * -1] = (p3 + p2 + p1 + 2 * p0 + q0 + q1 + q2 + 4) >> 3;
+            dst[strideb * +0] = (p2 + p1 + p0 + 2 * q0 + q1 + q2 + q3 + 4) >> 3;
+            dst[strideb * +1] = (p1 + p0 + q0 + 2 * q1 + q2 + q3 + q3 + 4) >> 3;
+            dst[strideb * +2] = (p0 + q0 + q1 + 2 * q2 + q3 + q3 + q3 + 4) >> 3;
+        } else {
+            int hev = FFABS(p1 - p0) > H || FFABS(q1 - q0) > H;
+
+            if (hev) {
+                int f = 3 * (q0 - p0) + av_clip_int8(p1 - q1), f1, f2;
+
+                f1 = FFMIN(f + 4, 127) >> 3;
+                f2 = FFMIN(f + 3, 127) >> 3;
+
+                dst[strideb * -1] = av_clip_uint8(p0 + f2);
+                dst[strideb * +0] = av_clip_uint8(q0 - f1);
+            } else {
+                int f = 3 * (q0 - p0), f1, f2;
+
+                f1 = FFMIN(f + 4, 127) >> 3;
+                f2 = FFMIN(f + 3, 127) >> 3;
+
+                dst[strideb * -1] = av_clip_uint8(p0 + f2);
+                dst[strideb * +0] = av_clip_uint8(q0 - f1);
+
+                f = (f1 + 1) >> 1;
+                dst[strideb * -2] = av_clip_uint8(p1 + f);
+                dst[strideb * +1] = av_clip_uint8(q1 - f);
+            }
+        }
+    }
+}
+
+#define lf_fn(dir, wd, sz, stridea, strideb) \
+static void loop_filter_##dir##_##wd##_##sz##_c(uint8_t *dst, \
+                                                ptrdiff_t stride, \
+                                                int E, int I, int H) \
+{ \
+    loop_filter(dst, stride, E, I, H, stridea, strideb, wd, sz); \
+}
+
+#define lf_fns(wd) \
+lf_fn(h, wd, 8, stride, 1) \
+lf_fn(v, wd, 8, 1, stride)
+
+lf_fns(4)
+lf_fns(8)
+lf_fns(16)
+
+static void vp9dsp_loopfilter_init(VP9DSPContext *dsp)
+{
+    dsp->loop_filter[0][0][0] = loop_filter_h_4_8_c;
+    dsp->loop_filter[0][1][0] = loop_filter_v_4_8_c;
+    dsp->loop_filter[1][0][0] = loop_filter_h_8_8_c;
+    dsp->loop_filter[1][1][0] = loop_filter_v_8_8_c;
+    dsp->loop_filter[2][0][0] = loop_filter_h_16_8_c;
+    dsp->loop_filter[2][1][0] = loop_filter_v_16_8_c;
+}
+
 void ff_vp9dsp_init(VP9DSPContext *dsp)
 {
     vp9dsp_intrapred_init(dsp);
     vp9dsp_itxfm_init(dsp);
+    vp9dsp_loopfilter_init(dsp);
 }

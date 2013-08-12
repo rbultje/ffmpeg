@@ -61,6 +61,20 @@ typedef struct VP9DSPContext {
     void (*itxfm_add[N_TXFM_SIZES + 1][N_TXFM_TYPES])(uint8_t *dst,
                                                       ptrdiff_t stride,
                                                       int16_t *block, int eob);
+
+    /*
+     * dimension 1: width of filter (0=4, 1=8, 2=16)
+     * dimension 2: 0=col-edge filter (h), 1=row-edge filter (v)
+     * dimension 3: operation size (currently 0=8, 1=16)
+     *
+     * dst/stride are aligned by operation size
+     */
+    // FIXME add argument so we can mix filter-width types for larger operation
+    // size if the elementary operation size doesn't match (since they are just
+    // supersets of each other). That won't help C performance but will allow
+    // more wide-operation SIMD use
+    void (*loop_filter[3][2][2])(uint8_t *dst, ptrdiff_t stride,
+                                 int mb_lim, int lim, int hev_thr);
 } VP9DSPContext;
 
 void ff_vp9dsp_init(VP9DSPContext *dsp);
