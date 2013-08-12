@@ -164,6 +164,7 @@ typedef struct VP9Context {
     uint8_t left_mode_ctx[16], *above_mode_ctx;
     uint8_t left_y_nnz_ctx[16], *above_y_nnz_ctx;
     uint8_t left_uv_nnz_ctx[2][8], *above_uv_nnz_ctx[2];
+    uint8_t *intra_pred_data[3];
     DECLARE_ALIGNED(16, int16_t, block)[4096];
     DECLARE_ALIGNED(16, int16_t, uvblock)[2][1024];
 } VP9Context;
@@ -182,13 +183,16 @@ static int update_size(AVCodecContext *ctx, int w, int h)
     s->cols     = (w + 7) >> 3;
     s->rows     = (h + 7) >> 3;
     av_free(s->above_partition_ctx);
-    s->above_partition_ctx = av_malloc(s->cols * 9);
-    s->above_skip_ctx = s->above_partition_ctx + s->cols;
-    s->above_txfm_ctx = s->above_skip_ctx + s->cols;
-    s->above_mode_ctx = s->above_txfm_ctx + s->cols;
-    s->above_y_nnz_ctx = s->above_mode_ctx + s->cols * 2;
-    s->above_uv_nnz_ctx[0] = s->above_y_nnz_ctx + s->cols * 2;
-    s->above_uv_nnz_ctx[1] = s->above_uv_nnz_ctx[0] + s->cols;
+    s->above_partition_ctx = av_malloc(s->sb_cols * 200);
+    s->above_skip_ctx = s->above_partition_ctx + s->sb_cols * 8;
+    s->above_txfm_ctx = s->above_skip_ctx + s->sb_cols * 8;
+    s->above_mode_ctx = s->above_txfm_ctx + s->sb_cols * 8;
+    s->above_y_nnz_ctx = s->above_mode_ctx + s->sb_cols * 16;
+    s->above_uv_nnz_ctx[0] = s->above_y_nnz_ctx + s->sb_cols * 16;
+    s->above_uv_nnz_ctx[1] = s->above_uv_nnz_ctx[0] + s->sb_cols * 8;
+    s->intra_pred_data[0] = s->above_uv_nnz_ctx[1] + s->sb_cols * 8;
+    s->intra_pred_data[1] = s->intra_pred_data[0] + s->sb_cols * 64;
+    s->intra_pred_data[2] = s->intra_pred_data[1] + s->sb_cols * 32;
 
     return 0;
 }
@@ -1044,13 +1048,14 @@ static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
     return 0;
 }
 
-static av_always_inline int check_intra_mode(int mode, uint8_t **a,
+static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **a,
                                              uint8_t *dst, ptrdiff_t stride,
                                              uint8_t *l, int col, int x, int w,
-                                             int y, enum TxfmMode tx)
+                                             int row, int y, enum TxfmMode tx,
+                                             int p)
 {
     // FIXME make work with tiling enabled (have_left check is wrong)
-    int have_top = y > 0, have_left = col * 2 + x > 0, have_topright = x < w - 1;
+    int have_top = row * 2 + y > 0, have_left = col * 2 + x > 0, have_topright = x < w - 1;
     static const uint8_t mode_conv[10][2 /* have_left */][2 /* have_top */] = {
         [VERT_PRED]            = { { DC_127_PRED,          VERT_PRED },
                                    { DC_127_PRED,          VERT_PRED } },
@@ -1099,26 +1104,35 @@ static av_always_inline int check_intra_mode(int mode, uint8_t **a,
     assert(mode >= 0 && mode < 10);
     mode = mode_conv[mode][have_left][have_top];
     if (edges[mode].needs_top) {
+        uint8_t *top;
+
+        // if top of sb64-row, use s->intra_pred_data[] instead of
+        // dst[-stride] for intra prediction (it contains pre- instead of
+        // post-loopfilter data)
+        if (have_top)
+            top = !(row & 7) && !y ?
+                s->intra_pred_data[p] + col * (8 >> !!p) + x * 4 : &dst[-stride];
+
         if (have_top &&
             (!edges[mode].needs_topleft || have_left) &&
             (tx != TX_4X4 || !edges[mode].needs_topright || have_topright)) {
-            *a = &dst[-stride];
+            *a = top;
         } else {
             if (have_top) {
-                memcpy(*a, &dst[-stride], 4 << tx);
+                memcpy(*a, top, 4 << tx);
             } else {
                 memset(*a, 127, 4 << tx);
             }
             if (edges[mode].needs_topleft) {
                 if (have_left && have_top) {
-                    (*a)[-1] = dst[-stride - 1];
+                    (*a)[-1] = top[-1];
                 } else {
                     (*a)[-1] = have_top ? 129 : 127;
                 }
             }
             if (tx == TX_4X4 && edges[mode].needs_topright) {
                 if (have_topright) {
-                    memcpy(&(*a)[4], &dst[4 - stride], 4);
+                    memcpy(&(*a)[4], &top[4], 4);
                 } else {
                     memset(&(*a)[4], (*a)[3], 4);
                 }
@@ -1162,8 +1176,8 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
             uint8_t a_buf[48], *a = &a_buf[16], l[32];
             enum TxfmType txtp = vp9_intra_txfm_type[mode];
 
-            mode = check_intra_mode(mode, &a, ptr, s->f->linesize[0], l,
-                                    col, x, w4, row * 2 + y, b->tx);
+            mode = check_intra_mode(s, mode, &a, ptr, s->f->linesize[0], l,
+                                    col, x, w4, row, y, b->tx, 0);
             s->dsp.intra_pred[b->tx][mode](ptr, s->f->linesize[0], l, a);
             // FIXME eob
             // FIXME lossless
@@ -1186,8 +1200,8 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
                 // FIXME alignment
                 uint8_t a_buf[48], *a = &a_buf[16], l[32];
 
-                mode = check_intra_mode(mode, &a, ptr, s->f->linesize[1], l,
-                                        col, x, w4, row * 2 + y, b->uvtx);
+                mode = check_intra_mode(s, mode, &a, ptr, s->f->linesize[1], l,
+                                        col, x, w4, row, y, b->uvtx, p + 1);
                 s->dsp.intra_pred[b->uvtx][mode](ptr, s->f->linesize[1], l, a);
                 // FIXME eob
                 // FIXME lossless
@@ -1768,9 +1782,19 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
                         return res;
                 }
 
+                // backup pre-loopfilter reconstruction data for intra
+                // prediction of next row of sb64s
+                memcpy(s->intra_pred_data[0] + s->tiling.tile_col_start * 8,
+                       s->f->data[0] + yoff2 + 63 * s->f->linesize[0],
+                       64 * s->sb_cols);
+                memcpy(s->intra_pred_data[1] + s->tiling.tile_col_start * 4,
+                       s->f->data[1] + uvoff2 + 31 * s->f->linesize[1],
+                       32 * s->sb_cols);
+                memcpy(s->intra_pred_data[2] + s->tiling.tile_col_start * 4,
+                       s->f->data[2] + uvoff2 + 31 * s->f->linesize[2],
+                       32 * s->sb_cols);
+
                 // loopfilter one row
-                // FIXME backup one row of intra prediction pre-lf data (see
-                // vp8 or h264 for examples)
                 yoff3 = yoff2;
                 uvoff3 = uvoff2;
                 lflvl_ptr = lflvl;
@@ -1885,6 +1909,7 @@ static int vp9_decode_free(AVCodecContext *ctx)
     av_freep(&s->above_partition_ctx);
     s->above_skip_ctx = s->above_txfm_ctx = s->above_mode_ctx = NULL;
     s->above_y_nnz_ctx = s->above_uv_nnz_ctx[0] = s->above_uv_nnz_ctx[1] = NULL;
+    s->intra_pred_data[0] = s->intra_pred_data[1] = s->intra_pred_data[2] = NULL;
 
     return 0;
 }
