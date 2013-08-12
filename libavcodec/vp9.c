@@ -1412,26 +1412,61 @@ static void loopfilter_sb(AVCodecContext *ctx, struct VP9Filter *lflvl,
     // FIXME also don't loopfilter edges that are out of visible area
 
     // filter edges between columns, Y plane (e.g. block1 | block2)
-    for (y = 0; y < 8; y++, dst += 8 * ls_y, lvl += 8) {
-        uint8_t *ptr = dst, *l = lvl, *hmask = lflvl->mask[0][0][y];
-        unsigned hm = hmask[0] | hmask[1] | hmask[2] | hmask[3];
+    for (y = 0; y < 8; y += 2, dst += 16 * ls_y, lvl += 16) {
+        uint8_t *ptr = dst, *l = lvl, *hmask1 = lflvl->mask[0][0][y];
+        uint8_t *hmask2 = lflvl->mask[0][0][y + 1];
+        unsigned hm1 = hmask1[0] | hmask1[1] | hmask1[2] | hmask1[3];
+        unsigned hm2 = hmask2[1] | hmask2[2] | hmask2[3], hm = hm1 | hm2;
 
         for (x = 1; hm & ~(x - 1); x <<= 1, ptr += 8, l++) {
-            if (hm & x) {
+            if (hm1 & x) {
                 int L = *l, H = L >> 4;
                 int E = s->filter.mblim_lut[L], I = s->filter.lim_lut[L];
 
                 if (col || x > 1) {
-                    if (hmask[0] & x) {
-                        s->dsp.loop_filter[2][0][0](ptr, ls_y, E, I, H);
-                    } else if (hmask[1] & x) {
-                        s->dsp.loop_filter[1][0][0](ptr, ls_y, E, I, H);
-                    } else if (hmask[2] & x) {
-                        s->dsp.loop_filter[0][0][0](ptr, ls_y, E, I, H);
+                    if (hmask1[0] & x) {
+                        assert(hmask2[0] & x);
+                        assert(l[8] == L);
+                        s->dsp.loop_filter[2][0][1](ptr, ls_y, E, I, H);
+                        hm2 &= ~x;
+                    } else if (hmask1[1] & x) {
+                        if ((hmask2[1] & x) && l[8] == L) {
+                            s->dsp.loop_filter[1][0][1](ptr, ls_y, E, I, H);
+                            hm2 &= ~x;
+                        } else {
+                            s->dsp.loop_filter[1][0][0](ptr, ls_y, E, I, H);
+                        }
+                    } else if (hmask1[2] & x) {
+                        if ((hmask2[2] & x) && l[8] == L) {
+                            s->dsp.loop_filter[0][0][1](ptr, ls_y, E, I, H);
+                            hm2 &= ~x;
+                        } else {
+                            s->dsp.loop_filter[0][0][0](ptr, ls_y, E, I, H);
+                        }
                     }
                 }
-                if (hmask[3] & x) {
-                    s->dsp.loop_filter[0][0][0](ptr + 4, ls_y, E, I, H);
+                if (hmask1[3] & x) {
+                    if ((hmask2[3] & x) && l[8] == L) {
+                        s->dsp.loop_filter[0][0][1](ptr + 4, ls_y, E, I, H);
+                        hm2 &= ~x;
+                    } else {
+                        s->dsp.loop_filter[0][0][0](ptr + 4, ls_y, E, I, H);
+                    }
+                }
+            }
+            if (hm2 & x) {
+                int L = l[8], H = L >> 4;
+                int E = s->filter.mblim_lut[L], I = s->filter.lim_lut[L];
+
+                if (col || x > 1) {
+                    if (hmask2[1] & x) {
+                        s->dsp.loop_filter[1][0][0](ptr + 8 * ls_y, ls_y, E, I, H);
+                    } else if (hmask2[2] & x) {
+                        s->dsp.loop_filter[0][0][0](ptr + 8 * ls_y, ls_y, E, I, H);
+                    }
+                }
+                if (hmask2[3] & x) {
+                    s->dsp.loop_filter[0][0][0](ptr + 8 * ls_y + 4, ls_y, E, I, H);
                 }
             }
         }
@@ -1444,24 +1479,65 @@ static void loopfilter_sb(AVCodecContext *ctx, struct VP9Filter *lflvl,
     lvl = lflvl->level;
     for (y = 0; y < 8; y++, dst += 8 * ls_y, lvl += 8) {
         uint8_t *ptr = dst, *l = lvl, *vmask = lflvl->mask[0][1][y];
-        unsigned vm = vmask[0] | vmask[1] | vmask[2] | vmask[3];
+        unsigned vm = vmask[0] | vmask[1] | vmask[2], vm3 = vmask[3];
 
-        for (x = 1; vm & ~(x - 1); x <<= 1, ptr += 8, l++) {
+        for (x = 1; vm & ~(x - 1); x <<= 2, ptr += 16, l += 2) {
             if (vm & x) {
                 int L = *l, H = L >> 4;
                 int E = s->filter.mblim_lut[L], I = s->filter.lim_lut[L];
 
                 if (row || y) {
                     if (vmask[0] & x) {
-                        s->dsp.loop_filter[2][1][0](ptr, ls_y, E, I, H);
+                        assert(vmask[0] & (x << 1));
+                        assert(l[1] == L);
+                        s->dsp.loop_filter[2][1][1](ptr, ls_y, E, I, H);
+                        vm &= ~(x << 1);
                     } else if (vmask[1] & x) {
-                        s->dsp.loop_filter[1][1][0](ptr, ls_y, E, I, H);
+                        if ((vmask[1] & (x << 1)) && l[1] == L) {
+                            s->dsp.loop_filter[1][1][1](ptr, ls_y, E, I, H);
+                            vm &= ~(x << 1);
+                        } else {
+                            s->dsp.loop_filter[1][1][0](ptr, ls_y, E, I, H);
+                        }
                     } else if (vmask[2] & x) {
-                        s->dsp.loop_filter[0][1][0](ptr, ls_y, E, I, H);
+                        if ((vmask[2] & (x << 1)) && l[1] == L) {
+                            s->dsp.loop_filter[0][1][1](ptr, ls_y, E, I, H);
+                            vm &= ~(x << 1);
+                        } else {
+                            s->dsp.loop_filter[0][1][0](ptr, ls_y, E, I, H);
+                        }
                     }
                 }
+            }
+            if (vm & (x << 1)) {
+                int L = l[1], H = L >> 4;
+                int E = s->filter.mblim_lut[L], I = s->filter.lim_lut[L];
+
+                if (vmask[1] & (x << 1)) {
+                    s->dsp.loop_filter[1][1][0](ptr + 8, ls_y, E, I, H);
+                } else if (vmask[2] & (x << 1)) {
+                    s->dsp.loop_filter[0][1][0](ptr + 8, ls_y, E, I, H);
+                }
+            }
+            if (vm3 & x) {
+                int L = *l, H = L >> 4;
+                int E = s->filter.mblim_lut[L], I = s->filter.lim_lut[L];
+
                 if (vmask[3] & x) {
-                    s->dsp.loop_filter[0][1][0](ptr + ls_y * 4, ls_y, E, I, H);
+                    if ((x & 0x55) && (vmask[3] & (x << 1)) && l[1] == L) {
+                        s->dsp.loop_filter[0][1][1](ptr + ls_y * 4, ls_y, E, I, H);
+                        vm3 &= ~(x << 1);
+                    } else {
+                        s->dsp.loop_filter[0][1][0](ptr + ls_y * 4, ls_y, E, I, H);
+                    }
+                }
+            }
+            if (vm3 & (x << 1)) {
+                int L = l[1], H = L >> 4;
+                int E = s->filter.mblim_lut[L], I = s->filter.lim_lut[L];
+
+                if (vmask[3] & (x << 1)) {
+                    s->dsp.loop_filter[0][1][0](ptr + ls_y * 4 + 8, ls_y, E, I, H);
                 }
             }
         }
@@ -1471,21 +1547,46 @@ static void loopfilter_sb(AVCodecContext *ctx, struct VP9Filter *lflvl,
     for (p = 0; p < 2; p++) {
         lvl = lflvl->level;
         dst = s->f->data[1 + p] + uvoff;
-        for (y = 0; y < 8; y += 2, dst += 8 * ls_uv, lvl += 16) {
-            uint8_t *ptr = dst, *l = lvl, *hmask = lflvl->mask[1][0][y];
-            unsigned hm = hmask[0] | hmask[1] | hmask[2];
+        for (y = 0; y < 8; y += 4, dst += 16 * ls_uv, lvl += 32) {
+            uint8_t *ptr = dst, *l = lvl, *hmask1 = lflvl->mask[1][0][y];
+            uint8_t *hmask2 = lflvl->mask[1][0][y + 2];
+            unsigned hm1 = hmask1[0] | hmask1[1] | hmask1[2];
+            unsigned hm2 = hmask2[1] | hmask2[2], hm = hm1 | hm2;
 
             for (x = 1; hm & ~(x - 1); x <<= 1, ptr += 4) {
-                if ((col || x > 1) && (hm & x)) {
+                if ((col || x > 1) && (hm1 & x)) {
                     int L = *l, H = L >> 4;
                     int E = s->filter.mblim_lut[L], I = s->filter.lim_lut[L];
 
-                    if (hmask[0] & x) {
-                        s->dsp.loop_filter[2][0][0](ptr, ls_uv, E, I, H);
-                    } else if (hmask[1] & x) {
-                        s->dsp.loop_filter[1][0][0](ptr, ls_uv, E, I, H);
-                    } else if (hmask[2] & x) {
-                        s->dsp.loop_filter[0][0][0](ptr, ls_uv, E, I, H);
+                    if (hmask1[0] & x) {
+                        assert(hmask2[0] & x);
+                        assert(l[16] == L);
+                        s->dsp.loop_filter[2][0][1](ptr, ls_uv, E, I, H);
+                        hm2 &= ~x;
+                    } else if (hmask1[1] & x) {
+                        if ((hmask2[1] & x) && l[16] == L) {
+                            s->dsp.loop_filter[1][0][1](ptr, ls_uv, E, I, H);
+                            hm2 &= ~x;
+                        } else {
+                            s->dsp.loop_filter[1][0][0](ptr, ls_uv, E, I, H);
+                        }
+                    } else if (hmask1[2] & x) {
+                        if ((hmask2[2] & x) && l[16] == L) {
+                            s->dsp.loop_filter[0][0][1](ptr, ls_uv, E, I, H);
+                            hm2 &= ~x;
+                        } else {
+                            s->dsp.loop_filter[0][0][0](ptr, ls_uv, E, I, H);
+                        }
+                    }
+                }
+                if ((col || x > 1) && (hm2 & x)) {
+                    int L = l[16], H = L >> 4;
+                    int E = s->filter.mblim_lut[L], I = s->filter.lim_lut[L];
+
+                    if (hmask2[1] & x) {
+                        s->dsp.loop_filter[1][0][0](ptr + 8 * ls_uv, ls_uv, E, I, H);
+                    } else if (hmask2[2] & x) {
+                        s->dsp.loop_filter[0][0][0](ptr + 8 * ls_uv, ls_uv, E, I, H);
                     }
                 }
                 if (x & 0xAA)
@@ -1504,11 +1605,25 @@ static void loopfilter_sb(AVCodecContext *ctx, struct VP9Filter *lflvl,
                     int E = s->filter.mblim_lut[L], I = s->filter.lim_lut[L];
 
                     if (vmask[0] & x) {
-                        s->dsp.loop_filter[2][1][0](ptr, ls_uv, E, I, H);
+                        assert(x & 0x11);
+                        assert(vmask[0] & (x << 2));
+                        assert(l[2] == L);
+                        s->dsp.loop_filter[2][1][1](ptr, ls_uv, E, I, H);
+                        vm &= ~(x << 2);
                     } else if (vmask[1] & x) {
-                        s->dsp.loop_filter[1][1][0](ptr, ls_uv, E, I, H);
+                        if ((x & 0x11) && (vmask[1] & (x << 2)) && l[2] == L) {
+                            s->dsp.loop_filter[1][1][1](ptr, ls_uv, E, I, H);
+                            vm &= ~(x << 2);
+                        } else {
+                            s->dsp.loop_filter[1][1][0](ptr, ls_uv, E, I, H);
+                        }
                     } else if (vmask[2] & x) {
-                        s->dsp.loop_filter[0][1][0](ptr, ls_uv, E, I, H);
+                        if ((x & 0x11) && (vmask[2] & (x << 2)) && l[2] == L) {
+                            s->dsp.loop_filter[0][1][1](ptr, ls_uv, E, I, H);
+                            vm &= ~(x << 2);
+                        } else {
+                            s->dsp.loop_filter[0][1][0](ptr, ls_uv, E, I, H);
+                        }
                     }
                 }
             }
