@@ -1305,7 +1305,8 @@ static int decode_b(AVCodecContext *ctx, int row, int col,
     intra_recon(ctx, &b, row, col, yoff, uvoff);
 
     // pick filter level and find edges to apply filter to
-    if ((lvl = s->segmentation.feat[b.seg_id].lflvl[0][0]) > 0) {
+    if (s->filter.level &&
+        (lvl = s->segmentation.feat[b.seg_id].lflvl[0][0]) > 0) {
         for (y = 0; y < h4; y++)
             memset(&lflvl->level[((row & 7) + y) * 8 + (col & 7)], lvl, w4);
         mask_edges(lflvl, 0, row & 7, col & 7, w4, h4, b.tx);
@@ -1429,8 +1430,9 @@ static void loopfilter_sb(AVCodecContext *ctx, struct VP9Filter *lflvl,
     for (y = 0; y < 8; y += 2, dst += 16 * ls_y, lvl += 16) {
         uint8_t *ptr = dst, *l = lvl, *hmask1 = lflvl->mask[0][0][y];
         uint8_t *hmask2 = lflvl->mask[0][0][y + 1];
-        unsigned hm1 = hmask1[0] | hmask1[1] | hmask1[2] | hmask1[3];
-        unsigned hm2 = hmask2[1] | hmask2[2] | hmask2[3], hm = hm1 | hm2;
+        unsigned hm1 = hmask1[0] | hmask1[1] | hmask1[2], hm13 = hmask1[3];
+        unsigned hm2 = hmask2[1] | hmask2[2], hm23 = hmask2[3];
+        unsigned hm = hm1 | hm2 | hm13 | hm23;
 
         for (x = 1; hm & ~(x - 1); x <<= 1, ptr += 8, l++) {
             if (hm1 & x) {
@@ -1459,14 +1461,6 @@ static void loopfilter_sb(AVCodecContext *ctx, struct VP9Filter *lflvl,
                         }
                     }
                 }
-                if (hmask1[3] & x) {
-                    if ((hmask2[3] & x) && l[8] == L) {
-                        s->dsp.loop_filter[0][0][1](ptr + 4, ls_y, E, I, H);
-                        hm2 &= ~x;
-                    } else {
-                        s->dsp.loop_filter[0][0][0](ptr + 4, ls_y, E, I, H);
-                    }
-                }
             }
             if (hm2 & x) {
                 int L = l[8], H = L >> 4;
@@ -1479,6 +1473,24 @@ static void loopfilter_sb(AVCodecContext *ctx, struct VP9Filter *lflvl,
                         s->dsp.loop_filter[0][0][0](ptr + 8 * ls_y, ls_y, E, I, H);
                     }
                 }
+            }
+            if (hm13 & x) {
+                int L = *l, H = L >> 4;
+                int E = s->filter.mblim_lut[L], I = s->filter.lim_lut[L];
+
+                if (hmask1[3] & x) {
+                    if ((hmask2[3] & x) && l[8] == L) {
+                        s->dsp.loop_filter[0][0][1](ptr + 4, ls_y, E, I, H);
+                        hm23 &= ~x;
+                    } else {
+                        s->dsp.loop_filter[0][0][0](ptr + 4, ls_y, E, I, H);
+                    }
+                }
+            }
+            if (hm23 & x) {
+                int L = l[8], H = L >> 4;
+                int E = s->filter.mblim_lut[L], I = s->filter.lim_lut[L];
+
                 if (hmask2[3] & x) {
                     s->dsp.loop_filter[0][0][0](ptr + 8 * ls_y + 4, ls_y, E, I, H);
                 }
@@ -1795,13 +1807,15 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
                        32 * s->sb_cols);
 
                 // loopfilter one row
-                yoff3 = yoff2;
-                uvoff3 = uvoff2;
-                lflvl_ptr = lflvl;
-                for (col = s->tiling.tile_col_start;
-                     col  < s->tiling.tile_col_end;
-                     col += 8, yoff3 += 64, uvoff3 += 32, lflvl_ptr++) {
-                    loopfilter_sb(ctx, lflvl_ptr, row, col, yoff3, uvoff3);
+                if (s->filter.level) {
+                    yoff3 = yoff2;
+                    uvoff3 = uvoff2;
+                    lflvl_ptr = lflvl;
+                    for (col = s->tiling.tile_col_start;
+                         col  < s->tiling.tile_col_end;
+                         col += 8, yoff3 += 64, uvoff3 += 32, lflvl_ptr++) {
+                        loopfilter_sb(ctx, lflvl_ptr, row, col, yoff3, uvoff3);
+                    }
                 }
             }
         }
