@@ -2084,7 +2084,7 @@ static av_always_inline void loop_filter(uint8_t *dst,  ptrdiff_t stride,
                 dst[strideb * -1] = av_clip_uint8(p0 + f2);
                 dst[strideb * +0] = av_clip_uint8(q0 - f1);
             } else {
-                int f = 3 * (q0 - p0), f1, f2;
+                int f = av_clip_int8(3 * (q0 - p0)), f1, f2;
 
                 f1 = FFMIN(f + 4, 127) >> 3;
                 f2 = FFMIN(f + 3, 127) >> 3;
