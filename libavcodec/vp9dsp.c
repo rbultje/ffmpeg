@@ -2076,7 +2076,7 @@ static av_always_inline void loop_filter(uint8_t *dst,  ptrdiff_t stride,
             int hev = FFABS(p1 - p0) > H || FFABS(q1 - q0) > H;
 
             if (hev) {
-                int f = 3 * (q0 - p0) + av_clip_int8(p1 - q1), f1, f2;
+                int f = av_clip_int8(3 * (q0 - p0) + av_clip_int8(p1 - q1)), f1, f2;
 
                 f1 = FFMIN(f + 4, 127) >> 3;
                 f2 = FFMIN(f + 3, 127) >> 3;
