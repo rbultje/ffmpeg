@@ -57,7 +57,6 @@ typedef struct VP9Context {
     VideoDSPContext vdsp;
     GetBitContext gb;
     VP56RangeCoder c;
-    AVFrame *f;
 
     // bitstream header
     unsigned profile:2;
@@ -79,7 +78,7 @@ typedef struct VP9Context {
     uint8_t refidx[3] /* :3 */;
     uint8_t signbias[3] /* :1 */;
     uint8_t varcompref[2] /* :2 */;
-    AVFrame *refs[8], *cur_frame;
+    AVFrame *refs[8], *f, *fb[10];
 
     struct {
         unsigned level:6;
@@ -1719,15 +1718,32 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
                             int *got_frame, const uint8_t *data, int size)
 {
     VP9Context *s = ctx->priv_data;
-    int res, tile_row, tile_col;
+    int res, tile_row, tile_col, i;
+    //AVFrame *prev_frame = s->f; // for segmentation map
 
     if ((res = decode_frame_header(ctx, data, size)) < 0)
         return res;
     data += res;
     size -= res;
 
-    // FIXME keep track of reference frames, discard old references
-    if ((res = ff_get_buffer(ctx, s->f, AV_GET_BUFFER_FLAG_REF)) < 0)
+    // discard old references
+    for (i = 0; i < 10; i++) {
+        AVFrame *f = s->fb[i];
+        if (f->data[0] && f != s->f &&
+            f != s->refs[0] && f != s->refs[1] &&
+            f != s->refs[2] && f != s->refs[3] &&
+            f != s->refs[4] && f != s->refs[5] &&
+            f != s->refs[6] && f != s->refs[7])
+            av_frame_unref(f);
+    }
+
+    // find unused reference
+    for (i = 0; i < 10; i++)
+        if (!s->fb[i]->data[0])
+            break;
+    s->f = s->fb[i];
+    if ((res = ff_get_buffer(ctx, s->f,
+                             s->refreshrefmask ? AV_GET_BUFFER_FLAG_REF : 0)) < 0)
         return res;
 
     // main tile decode loop
@@ -1841,7 +1857,10 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
         }
     }
 
-    // FIXME ref frame setup
+    // ref frame setup
+    for (i = 0; i < 8; i++)
+        if (s->refreshrefmask & (1 << i))
+            s->refs[i] = s->f;
 
     if (!s->invisible) {
         if ((res = av_frame_ref(out_pic, s->f)) < 0)
@@ -1904,13 +1923,16 @@ static void vp9_decode_flush(AVCodecContext *ctx)
 static int vp9_decode_init(AVCodecContext *ctx)
 {
     VP9Context *s = ctx->priv_data;
+    int i;
 
     ctx->pix_fmt = AV_PIX_FMT_YUV420P;
     ff_vp9dsp_init(&s->dsp);
     ff_videodsp_init(&s->vdsp, 8);
-    s->f = av_frame_alloc();
-    if (!s->f)
-        return AVERROR(ENOMEM);
+    for (i = 0; i < 10; i++) {
+        s->fb[i] = av_frame_alloc();
+        if (!s->fb[i])
+            return AVERROR(ENOMEM);
+    }
     s->filter.sharpness = -1;
 
     return 0;
@@ -1919,8 +1941,13 @@ static int vp9_decode_init(AVCodecContext *ctx)
 static int vp9_decode_free(AVCodecContext *ctx)
 {
     VP9Context *s = ctx->priv_data;
+    int i;
 
-    av_frame_free(&s->f);
+    for (i = 0; i < 10; i++) {
+        if (s->fb[i]->data[0])
+            av_frame_unref(s->fb[i]);
+        av_frame_free(&s->fb[i]);
+    }
     av_freep(&s->above_partition_ctx);
     s->above_skip_ctx = s->above_txfm_ctx = s->above_mode_ctx = NULL;
     s->above_y_nnz_ctx = s->above_uv_nnz_ctx[0] = s->above_uv_nnz_ctx[1] = NULL;
