@@ -586,107 +586,26 @@ static void diag_downleft_4x4_c(uint8_t *dst, ptrdiff_t stride,
     DST(3,3) = a7;  // note: this is different from vp8 and such
 }
 
-static void diag_downleft_8x8_c(uint8_t *dst, ptrdiff_t stride,
-                                const uint8_t *left, const uint8_t *top)
-{
-    int a0 = top[0], a1 = top[1], a2 = top[2], a3 = top[3],
-        a4 = top[4], a5 = top[5], a6 = top[6], a7 = top[7];
-
-    DST(0,0) = (a0 + a1 * 2 + a2 + 2) >> 2;
-    DST(1,0) = DST(0,1) = (a1 + a2 * 2 + a3 + 2) >> 2;
-    DST(2,0) = DST(1,1) = DST(0,2) = (a2 + a3 * 2 + a4 + 2) >> 2;
-    DST(3,0) = DST(2,1) = DST(1,2) = DST(0,3) = (a3 + a4 * 2 + a5 + 2) >> 2;
-    DST(4,0) = DST(3,1) = DST(2,2) = DST(1,3) =
-               DST(0,4) = (a4 + a5 * 2 + a6 + 2) >> 2;
-    DST(5,0) = DST(4,1) = DST(3,2) = DST(2,3) = DST(1,4) =
-               DST(0,5) = (a5 + a6 * 2 + a7 + 2) >> 2;
-    DST(6,0) = DST(5,1) = DST(4,2) = DST(3,3) = DST(2,4) = DST(1,5) =
-               DST(0,6) = (a6 + a7 * 3 + 2) >> 2;
-    DST(7,0) = DST(6,1) = DST(7,1) = DST(5,2) = DST(6,2) = DST(7,2) =
-               DST(4,3) = DST(5,3) = DST(6,3) = DST(7,3) = DST(3,4) =
-               DST(4,4) = DST(5,4) = DST(6,4) = DST(7,4) = DST(2,5) =
-               DST(3,5) = DST(4,5) = DST(5,5) = DST(6,5) = DST(7,5) =
-               DST(1,6) = DST(2,6) = DST(3,6) = DST(4,6) = DST(5,6) =
-               DST(6,6) = DST(7,6) = DST(0,7) = DST(1,7) = DST(2,7) =
-               DST(3,7) = DST(4,7) = DST(5,7) = DST(6,7) = DST(7,7) = a7;
+#define def_diag_downleft(size) \
+static void diag_downleft_##size##x##size##_c(uint8_t *dst, ptrdiff_t stride, \
+                                              const uint8_t *left, const uint8_t *top) \
+{ \
+    int i, j; \
+    uint8_t v[size - 1]; \
+\
+    for (i = 0; i < size - 2; i++) \
+        v[i] = (top[i] + top[i + 1] * 2 + top[i + 2] + 2) >> 2; \
+    v[size - 2] = (top[size - 2] + top[size - 1] * 3 + 2) >> 2; \
+\
+    for (j = 0; j < size; j++) { \
+        memcpy(dst + j*stride, v + j, size - 1 - j); \
+        memset(dst + j*stride + size - 1 - j, top[size - 1], j + 1); \
+    } \
 }
 
-static void diag_downleft_16x16_c(uint8_t *dst, ptrdiff_t stride,
-                                  const uint8_t *left, const uint8_t *top)
-{
-    int a0 = top[0], a1 = top[1], a2 = top[2], a3 = top[3],
-        a4 = top[4], a5 = top[5], a6 = top[6], a7 = top[7],
-        a8 = top[8], a9 = top[9], a10 = top[10], a11 = top[11],
-        a12 = top[12], a13 = top[13], a14 = top[14], a15 = top[15];
-
-    DST(0,0)  = (a0 + a1 * 2 + a2 + 2) >> 2;
-    DST(1,0)  = DST(0,1)  = (a1 + a2 * 2 + a3 + 2) >> 2;
-    DST(2,0)  = DST(1,1)  = DST(0,2)  = (a2 + a3 * 2 + a4 + 2) >> 2;
-    DST(3,0)  = DST(2,1)  = DST(1,2)  = DST(0,3)  = (a3 + a4 * 2 + a5 + 2) >> 2;
-    DST(4,0)  = DST(3,1)  = DST(2,2)  = DST(1,3)  =
-                DST(0,4)  = (a4 + a5 * 2 + a6 + 2) >> 2;
-    DST(5,0)  = DST(4,1)  = DST(3,2)  = DST(2,3)  = DST(1,4)  =
-                DST(0,5)  = (a5 + a6 * 2 + a7 + 2) >> 2;
-    DST(6,0)  = DST(5,1)  = DST(4,2)  = DST(3,3)  = DST(2,4)  = DST(1,5)  =
-                DST(0,6)  = (a6 + a7 * 2 + a8 + 2) >> 2;
-    DST(7,0)  = DST(6,1)  = DST(5,2)  = DST(4,3)  = DST(3,4)  = DST(2,5)  =
-                DST(1,6)  = DST(0,7)  = (a7 + a8 * 2 + a9 + 2) >> 2;
-    DST(8,0)  = DST(7,1)  = DST(6,2)  = DST(5,3)  = DST(4,4)  = DST(3,5)  =
-                DST(2,6)  = DST(1,7)  = DST(0,8)  = (a8 + a9 * 2 + a10 + 2) >> 2;
-    DST(9,0)  = DST(8,1)  = DST(7,2)  = DST(6,3)  = DST(5,4)  = DST(4,5)  =
-                DST(3,6)  = DST(2,7)  = DST(1,8)  =
-                DST(0,9)  = (a9 + a10 * 2 + a11 + 2) >> 2;
-    DST(10,0) = DST(9,1)  = DST(8,2)  = DST(7,3)  = DST(6,4)  = DST(5,5)  =
-                DST(4,6)  = DST(3,7)  = DST(2,8)  = DST(1,9)  =
-                DST(0,10) = (a10 + a11 * 2 + a12 + 2) >> 2;
-    DST(11,0) = DST(10,1) = DST(9,2)  = DST(8,3)  = DST(7,4)  = DST(6,5)  =
-                DST(5,6)  = DST(4,7)  = DST(3,8)  = DST(2,9)  = DST(1,10) =
-                DST(0,11) = (a11 + a12 * 2 + a13 + 2) >> 2;
-    DST(12,0) = DST(11,1) = DST(10,2) = DST(9,3)  = DST(8,4)  = DST(7,5)  =
-                DST(6,6)  = DST(5,7)  = DST(4,8)  = DST(3,9)  = DST(2,10) =
-                DST(1,11) = DST(0,12) = (a12 + a13 * 2 + a14 + 2) >> 2;
-    DST(13,0) = DST(12,1) = DST(11,2) = DST(10,3) = DST(9,4)  = DST(8,5)  =
-                DST(7,6)  = DST(6,7)  = DST(5,8)  = DST(4,9)  = DST(3,10) =
-                DST(2,11) = DST(1,12) = DST(0,13) = (a13 + a14 * 2 + a15 + 2) >> 2;
-    DST(14,0) = DST(13,1) = DST(12,2) = DST(11,3) = DST(10,4) = DST(9,5)  =
-                DST(8,6)  = DST(7,7)  = DST(6,8)  = DST(5,9)  = DST(4,10) =
-                DST(3,11) = DST(2,12) = DST(1,13) =
-                DST(0,14) = (a14 + a15 * 3 + 2) >> 2;
-    DST(15,0) = DST(14,1) = DST(15,1) = DST(13,2) = DST(14,2) = DST(15,2) =
-                DST(12,3) = DST(13,3) = DST(14,3) = DST(15,3) = DST(11,4) =
-                DST(12,4) = DST(13,4) = DST(14,4) = DST(15,4) = DST(10,5) =
-                DST(11,5) = DST(12,5) = DST(13,5) = DST(14,5) = DST(15,5) =
-                DST(9,6)  = DST(10,6) = DST(11,6) = DST(12,6) = DST(13,6) =
-                DST(14,6) = DST(15,6) = DST(8,7)  = DST(9,7)  = DST(10,7) =
-                DST(11,7) = DST(12,7) = DST(13,7) = DST(14,7) = DST(15,7) =
-                DST(7,8)  = DST(8,8)  = DST(9,8)  = DST(10,8) = DST(11,8) =
-                DST(12,8) = DST(13,8) = DST(14,8) = DST(15,8) = DST(6,9)  =
-                DST(7,9)  = DST(8,9)  = DST(9,9)  = DST(10,9) = DST(11,9) =
-                DST(12,9) = DST(13,9) = DST(14,9) = DST(15,9) = DST(5,10) =
-                DST(6,10) = DST(7,10) = DST(8,10) = DST(9,10) = DST(10,10) =
-                DST(11,10) = DST(12,10) = DST(13,10) = DST(14,10) = DST(15,10) =
-                DST(4,11) = DST(5,11) = DST(6,11) = DST(7,11) = DST(8,11) =
-                DST(9,11) = DST(10,11) = DST(11,11) = DST(12,11) = DST(13,11) =
-                DST(14,11) = DST(15,11) = DST(3,12) = DST(4,12) = DST(5,12) =
-                DST(6,12) = DST(7,12) = DST(8,12) = DST(9,12) = DST(10,12) =
-                DST(11,12) = DST(12,12) = DST(13,12) = DST(14,12) = DST(15,12) =
-                DST(2,13) = DST(3,13) = DST(4,13) = DST(5,13) = DST(6,13) =
-                DST(7,13) = DST(8,13) = DST(9,13) = DST(10,13) = DST(11,13) =
-                DST(12,13) = DST(13,13) = DST(14,13) = DST(15,13) = DST(1,14) =
-                DST(2,14) = DST(3,14) = DST(4,14) = DST(5,14) = DST(6,14) =
-                DST(7,14) = DST(8,14) = DST(9,14) = DST(10,14) = DST(11,14) =
-                DST(12,14) = DST(13,14) = DST(14,14) = DST(15,14) = DST(0,15) =
-                DST(1,15) = DST(2,15) = DST(3,15) = DST(4,15) = DST(5,15) =
-                DST(6,15) = DST(7,15) = DST(8,15) = DST(9,15) = DST(10,15) =
-                DST(11,15) = DST(12,15) = DST(13,15) = DST(14,15) =
-                DST(15,15) = a15;
-}
-
-static void diag_downleft_32x32_c(uint8_t *dst, ptrdiff_t stride,
-                                  const uint8_t *left, const uint8_t *top)
-{
-    //..
-}
+def_diag_downleft(8)
+def_diag_downleft(16)
+def_diag_downleft(32)
 
 static void diag_downright_4x4_c(uint8_t *dst, ptrdiff_t stride,
                                  const uint8_t *left, const uint8_t *top)
@@ -703,127 +622,28 @@ static void diag_downright_4x4_c(uint8_t *dst, ptrdiff_t stride,
     DST(3,0) = (a1 + a2 * 2 + a3 + 2) >> 2;
 }
 
-static void diag_downright_8x8_c(uint8_t *dst, ptrdiff_t stride,
-                                 const uint8_t *left, const uint8_t *top)
-{
-    int tl = top[-1], a0 = top[0], a1 = top[1], a2 = top[2], a3 = top[3],
-        a4 = top[4], a5 = top[5], a6 = top[6], a7 = top[7],
-        l0 = left[0], l1 = left[1], l2 = left[2], l3 = left[3],
-        l4 = left[4], l5 = left[5], l6 = left[6], l7 = left[7];
-
-    DST(0,7) = (l5 + l6 * 2 + l7 + 2) >> 2;
-    DST(0,6) = DST(1,7) = (l4 + l5 * 2 + l6 + 2) >> 2;
-    DST(0,5) = DST(1,6) = DST(2,7) = (l3 + l4 * 2 + l5 + 2) >> 2;
-    DST(0,4) = DST(1,5) = DST(2,6) = DST(3,7) = (l2 + l3 * 2 + l4 + 2) >> 2;
-    DST(0,3) = DST(1,4) = DST(2,5) = DST(3,6) =
-               DST(4,7) = (l1 + l2 * 2 + l3 + 2) >> 2;
-    DST(0,2) = DST(1,3) = DST(2,4) = DST(3,5) = DST(4,6) =
-               DST(5,7) = (l0 + l1 * 2 + l2 + 2) >> 2;
-    DST(0,1) = DST(1,2) = DST(2,3) = DST(3,4) = DST(4,5) = DST(5,6) =
-               DST(6,7) = (tl + l0 * 2 + l1 + 2) >> 2;
-    DST(0,0) = DST(1,1) = DST(2,2) = DST(3,3) = DST(4,4) = DST(5,5) =
-               DST(6,6) = DST(7,7) = (l0 + tl * 2 + a0 + 2) >> 2;
-    DST(1,0) = DST(2,1) = DST(3,2) = DST(4,3) = DST(5,4) = DST(6,5) =
-               DST(7,6) = (tl + a0 * 2 + a1 + 2) >> 2;
-    DST(2,0) = DST(3,1) = DST(4,2) = DST(5,3) = DST(6,4) =
-               DST(7,5) = (a0 + a1 * 2 + a2 + 2) >> 2;
-    DST(3,0) = DST(4,1) = DST(5,2) = DST(6,3) =
-               DST(7,4) = (a1 + a2 * 2 + a3 + 2) >> 2;
-    DST(4,0) = DST(5,1) = DST(6,2) = DST(7,3) = (a2 + a3 * 2 + a4 + 2) >> 2;
-    DST(5,0) = DST(6,1) = DST(7,2) = (a3 + a4 * 2 + a5 + 2) >> 2;
-    DST(6,0) = DST(7,1) = (a4 + a5 * 2 + a6 + 2) >> 2;
-    DST(7,0) = (a5 + a6 * 2 + a7 + 2) >> 2;
+#define def_diag_downright(size) \
+static void diag_downright_##size##x##size##_c(uint8_t *dst, ptrdiff_t stride, \
+                                               const uint8_t *left, const uint8_t *top) \
+{ \
+    int i, j; \
+    uint8_t v[size + size - 1]; \
+\
+    for (i = 0; i < size - 2; i++) { \
+        v[i           ] = (left[size - 1 - i] + left[size - 2 - i] * 2 + left[size - 3 - i] + 2) >> 2; \
+        v[size + 1 + i] = (top[i]             + top[i + 1]         * 2 + top[i + 2]         + 2) >> 2; \
+    } \
+    v[size - 2] = (left[1] + left[0] * 2 + top[-1] + 2) >> 2; \
+    v[size - 1] = (left[0] + top[-1] * 2 + top[ 0] + 2) >> 2; \
+    v[size    ] = (top[-1] + top[0]  * 2 + top[ 1] + 2) >> 2; \
+\
+    for (j = 0; j < size; j++) \
+        memcpy(dst + j*stride, v + size - 1 - j, size); \
 }
 
-static void diag_downright_16x16_c(uint8_t *dst, ptrdiff_t stride,
-                                   const uint8_t *left, const uint8_t *top)
-{
-    int tl = top[-1], a0 = top[0], a1 = top[1], a2 = top[2], a3 = top[3],
-        a4 = top[4], a5 = top[5], a6 = top[6], a7 = top[7],
-        a8 = top[8], a9 = top[9], a10 = top[10], a11 = top[11],
-        a12 = top[12], a13 = top[13], a14 = top[14], a15 = top[15],
-        l0 = left[0], l1 = left[1], l2 = left[2], l3 = left[3],
-        l4 = left[4], l5 = left[5], l6 = left[6], l7 = left[7],
-        l8 = left[8], l9 = left[9], l10 = left[10], l11 = left[11],
-        l12 = left[12], l13 = left[13], l14 = left[14], l15 = left[15];
-
-    DST(0,15) = (l13 + l14 * 2 + l15 + 2) >> 2;
-    DST(0,14) = DST(1,15) = (l12 + l13 * 2 + l14 + 2) >> 2;
-    DST(0,13) = DST(1,14) = DST(2,15) = (l11 + l12 * 2 + l13 + 2) >> 2;
-    DST(0,12) = DST(1,13) = DST(2,14) = DST(3,15) = (l10 + l11 * 2 + l12 + 2) >> 2;
-    DST(0,11) = DST(1,12) = DST(2,13) = DST(3,14) =
-                DST(4,15) = (l9 + l10 * 2 + l11 + 2) >> 2;
-    DST(0,10) = DST(1,11) = DST(2,12) = DST(3,13) = DST(4,14) =
-                DST(5,15) = (l8 + l9 * 2 + l10 + 2) >> 2;
-    DST(0,9)  = DST(1,10) = DST(2,11) = DST(3,12) = DST(4,13) = DST(5,14) =
-                DST(6,15) = (l7 + l8 * 2 + l9 + 2) >> 2;
-    DST(0,8)  = DST(1,9)  = DST(2,10) = DST(3,11) = DST(4,12) = DST(5,13) =
-                DST(6,14) = DST(7,15) = (l6 + l7 * 2 + l8 + 2) >> 2;
-    DST(0,7)  = DST(1,8)  = DST(2,9)  = DST(3,10) = DST(4,11) = DST(5,12) =
-                DST(6,13) = DST(7,14) = DST(8,15) = (l5 + l6 * 2 + l7 + 2) >> 2;
-    DST(0,6)  = DST(1,7)  = DST(2,8)  = DST(3,9)  = DST(4,10) = DST(5,11) =
-                DST(6,12) = DST(7,13) = DST(8,14) =
-                DST(9,15) = (l4 + l5 * 2 + l6 + 2) >> 2;
-    DST(0,5)  = DST(1,6)  = DST(2,7)  = DST(3,8)  = DST(4,9)  = DST(5,10) =
-                DST(6,11) = DST(7,12) = DST(8,13) = DST(9,14) =
-                DST(10,15) = (l3 + l4 * 2 + l5 + 2) >> 2;
-    DST(0,4)  = DST(1,5)  = DST(2,6)  = DST(3,7)  = DST(4,8)  = DST(5,9)  =
-                DST(6,10) = DST(7,11) = DST(8,12) = DST(9,13) = DST(10,14) =
-                DST(11,15) = (l2 + l3 * 2 + l4 + 2) >> 2;
-    DST(0,3)  = DST(1,4)  = DST(2,5)  = DST(3,6)  = DST(4,7)  = DST(5,8)  =
-                DST(6,9)  = DST(7,10) = DST(8,11) = DST(9,12) = DST(10,13) =
-                DST(11,14) = DST(12,15) = (l1 + l2 * 2 + l3 + 2) >> 2;
-    DST(0,2)  = DST(1,3)  = DST(2,4)  = DST(3,5)  = DST(4,6)  = DST(5,7)  =
-                DST(6,8)  = DST(7,9)  = DST(8,10) = DST(9,11) = DST(10,12) =
-                DST(11,13) = DST(12,14) = DST(13,15) = (l0 + l1 * 2 + l2 + 2) >> 2;
-    DST(0,1)  = DST(1,2)  = DST(2,3)  = DST(3,4)  = DST(4,5)  = DST(5,6)  =
-                DST(6,7)  = DST(7,8)  = DST(8,9)  = DST(9,10) = DST(10,11) =
-                DST(11,12) = DST(12,13) = DST(13,14) =
-                DST(14,15) = (tl + l0 * 2 + l1 + 2) >> 2;
-    DST(0,0)  = DST(1,1)  = DST(2,2)  = DST(3,3)  = DST(4,4)  = DST(5,5)  =
-                DST(6,6)  = DST(7,7)  = DST(8,8)  = DST(9,9)  = DST(10,10) =
-                DST(11,11) = DST(12,12) = DST(13,13) = DST(14,14) =
-                DST(15,15) = (l0 + tl * 2 + a0 + 2) >> 2;
-    DST(1,0)  = DST(2,1)  = DST(3,2)  = DST(4,3)  = DST(5,4)  = DST(6,5)  =
-                DST(7,6)  = DST(8,7)  = DST(9,8)  = DST(10,9) = DST(11,10) =
-                DST(12,11) = DST(13,12) = DST(14,13) =
-                DST(15,14) = (tl + a0 * 2 + a1 + 2) >> 2;
-    DST(2,0)  = DST(3,1)  = DST(4,2)  = DST(5,3)  = DST(6,4)  = DST(7,5)  =
-                DST(8,6)  = DST(9,7)  = DST(10,8) = DST(11,9) = DST(12,10) =
-                DST(13,11) = DST(14,12) = DST(15,13) = (a0 + a1 * 2 + a2 + 2) >> 2;
-    DST(3,0)  = DST(4,1)  = DST(5,2)  = DST(6,3)  = DST(7,4)  = DST(8,5)  =
-                DST(9,6)  = DST(10,7) = DST(11,8) = DST(12,9) = DST(13,10) =
-                DST(14,11) = DST(15,12) = (a1 + a2 * 2 + a3 + 2) >> 2;
-    DST(4,0)  = DST(5,1)  = DST(6,2)  = DST(7,3)  = DST(8,4)  = DST(9,5)  =
-                DST(10,6) = DST(11,7) = DST(12,8) = DST(13,9) = DST(14,10) =
-                DST(15,11) = (a2 + a3 * 2 + a4 + 2) >> 2;
-    DST(5,0)  = DST(6,1)  = DST(7,2)  = DST(8,3)  = DST(9,4)  = DST(10,5) =
-                DST(11,6) = DST(12,7) = DST(13,8) = DST(14,9) =
-                DST(15,10) = (a3 + a4 * 2 + a5 + 2) >> 2;
-    DST(6,0)  = DST(7,1)  = DST(8,2)  = DST(9,3)  = DST(10,4) = DST(11,5) =
-                DST(12,6) = DST(13,7) = DST(14,8) =
-                DST(15,9) = (a4 + a5 * 2 + a6 + 2) >> 2;
-    DST(7,0)  = DST(8,1)  = DST(9,2)  = DST(10,3) = DST(11,4) = DST(12,5) =
-                DST(13,6) = DST(14,7) = DST(15,8) = (a5 + a6 * 2 + a7 + 2) >> 2;
-    DST(8,0)  = DST(9,1)  = DST(10,2) = DST(11,3) = DST(12,4) = DST(13,5) =
-                DST(14,6) = DST(15,7) = (a6 + a7 * 2 + a8 + 2) >> 2;
-    DST(9,0)  = DST(10,1) = DST(11,2) = DST(12,3) = DST(13,4) = DST(14,5) =
-                DST(15,6) = (a7 + a8 * 2 + a9 + 2) >> 2;
-    DST(10,0) = DST(11,1) = DST(12,2) = DST(13,3) = DST(14,4) =
-                DST(15,5) = (a8 + a9 * 2 + a10 + 2) >> 2;
-    DST(11,0) = DST(12,1) = DST(13,2) = DST(14,3) =
-                DST(15,4) = (a9 + a10 * 2 + a11 + 2) >> 2;
-    DST(12,0) = DST(13,1) = DST(14,2) = DST(15,3) = (a10 + a11 * 2 + a12 + 2) >> 2;
-    DST(13,0) = DST(14,1) = DST(15,2) = (a11 + a12 * 2 + a13 + 2) >> 2;
-    DST(14,0) = DST(15,1) = (a12 + a13 * 2 + a14 + 2) >> 2;
-    DST(15,0) = (a13 + a14 * 2 + a15 + 2) >> 2;
-}
-
-static void diag_downright_32x32_c(uint8_t *dst, ptrdiff_t stride,
-                                   const uint8_t *left, const uint8_t *top)
-{
-    //..
-}
+def_diag_downright(8)
+def_diag_downright(16)
+def_diag_downright(32)
 
 static void vert_right_4x4_c(uint8_t *dst, ptrdiff_t stride,
                              const uint8_t *left, const uint8_t *top)
@@ -843,133 +663,36 @@ static void vert_right_4x4_c(uint8_t *dst, ptrdiff_t stride,
     DST(3,1) = (a1 + a2 * 2 + a3 + 2) >> 2;
 }
 
-static void vert_right_8x8_c(uint8_t *dst, ptrdiff_t stride,
-                             const uint8_t *left, const uint8_t *top)
-{
-    int tl = top[-1], a0 = top[0], a1 = top[1], a2 = top[2], a3 = top[3],
-        a4 = top[4], a5 = top[5], a6 = top[6], a7 = top[7],
-        l0 = left[0], l1 = left[1], l2 = left[2], l3 = left[3],
-        l4 = left[4], l5 = left[5], l6 = left[6];
-
-    DST(0,7) = (l4 + l5 * 2 + l6 + 2) >> 2;
-    DST(0,6) = (l3 + l4 * 2 + l5 + 2) >> 2;
-    DST(0,5) = DST(1,7) = (l2 + l3 * 2 + l4 + 2) >> 2;
-    DST(0,4) = DST(1,6) = (l1 + l2 * 2 + l3 + 2) >> 2;
-    DST(0,3) = DST(1,5) = DST(2,7) = (l0 + l1 * 2 + l2 + 2) >> 2;
-    DST(0,2) = DST(1,4) = DST(2,6) = (tl + l0 * 2 + l1 + 2) >> 2;
-    DST(0,0) = DST(1,2) = DST(2,4) = DST(3,6) = (tl + a0 + 1) >> 1;
-    DST(0,1) = DST(1,3) = DST(2,5) = DST(3,7) = (l0 + tl * 2 + a0 + 2) >> 2;
-    DST(1,0) = DST(2,2) = DST(3,4) = DST(4,6) = (a0 + a1 + 1) >> 1;
-    DST(1,1) = DST(2,3) = DST(3,5) = DST(4,7) = (tl + a0 * 2 + a1 + 2) >> 2;
-    DST(2,0) = DST(3,2) = DST(4,4) = DST(5,6) = (a1 + a2 + 1) >> 1;
-    DST(2,1) = DST(3,3) = DST(4,5) = DST(5,7) = (a0 + a1 * 2 + a2 + 2) >> 2;
-    DST(3,0) = DST(4,2) = DST(5,4) = DST(6,6) = (a2 + a3 + 1) >> 1;
-    DST(3,1) = DST(4,3) = DST(5,5) = DST(6,7) = (a1 + a2 * 2 + a3 + 2) >> 2;
-    DST(4,0) = DST(5,2) = DST(6,4) = DST(7,6) = (a3 + a4 + 1) >> 1;
-    DST(4,1) = DST(5,3) = DST(6,5) = DST(7,7) = (a2 + a3 * 2 + a4 + 2) >> 2;
-    DST(5,0) = DST(6,2) = DST(7,4) = (a4 + a5 + 1) >> 1;
-    DST(5,1) = DST(6,3) = DST(7,5) = (a3 + a4 * 2 + a5 + 2) >> 2;
-    DST(6,0) = DST(7,2) = (a5 + a6 + 1) >> 1;
-    DST(6,1) = DST(7,3) = (a4 + a5 * 2 + a6 + 2) >> 2;
-    DST(7,0) = (a6 + a7 + 1) >> 1;
-    DST(7,1) = (a5 + a6 * 2 + a7 + 2) >> 2;
+#define def_vert_right(size) \
+static void vert_right_##size##x##size##_c(uint8_t *dst, ptrdiff_t stride, \
+                                           const uint8_t *left, const uint8_t *top) \
+{ \
+    int i, j; \
+    uint8_t ve[size + size/2 - 1], vo[size + size/2 - 1]; \
+\
+    for (i = 0; i < size/2 - 2; i++) { \
+        vo[i] = (left[size - 4 - i*2] + left[size - 3 - i*2] * 2 + left[size - 2 - i*2] + 2) >> 2; \
+        ve[i] = (left[size - 5 - i*2] + left[size - 4 - i*2] * 2 + left[size - 3 - i*2] + 2) >> 2; \
+    } \
+    vo[size/2 - 2] = (left[0] + left[1] * 2 + left[2] + 2) >> 2; \
+    ve[size/2 - 2] = (top[-1] + left[0] * 2 + left[1] + 2) >> 2; \
+\
+    ve[size/2 - 1] = (top[-1] + top[0] + 1) >> 1; \
+    vo[size/2 - 1] = (left[0] + top[-1] * 2 + top[0] + 2) >> 2; \
+    for (i = 0; i < size - 1; i++) { \
+        ve[size/2 + i] = (top[i] + top[i + 1] + 1) >> 1; \
+        vo[size/2 + i] = (top[i - 1] + top[i] * 2 + top[i + 1] + 2) >> 2; \
+    } \
+\
+    for (j = 0; j < size / 2; j++) { \
+        memcpy(dst +  j*2     *stride, ve + size/2 - 1 - j, size); \
+        memcpy(dst + (j*2 + 1)*stride, vo + size/2 - 1 - j, size); \
+    } \
 }
 
-static void vert_right_16x16_c(uint8_t *dst, ptrdiff_t stride,
-                               const uint8_t *left, const uint8_t *top)
-{
-    int tl = top[-1], a0 = top[0], a1 = top[1], a2 = top[2], a3 = top[3],
-        a4 = top[4], a5 = top[5], a6 = top[6], a7 = top[7],
-        a8 = top[8], a9 = top[9], a10 = top[10], a11 = top[11],
-        a12 = top[12], a13 = top[13], a14 = top[14], a15 = top[15],
-        l0 = left[0], l1 = left[1], l2 = left[2], l3 = left[3],
-        l4 = left[4], l5 = left[5], l6 = left[6], l7 = left[7],
-        l8 = left[8], l9 = left[9], l10 = left[10], l11 = left[11],
-        l12 = left[12], l13 = left[13], l14 = left[14];
-
-    DST(0,15) = (l12 + l13 * 2 + l14 + 2) >> 2;
-    DST(0,14) = (l11 + l12 * 2 + l13 + 2) >> 2;
-    DST(0,13) = DST(1,15) = (l10 + l11 * 2 + l12 + 2) >> 2;
-    DST(0,12) = DST(1,14) = (l9 + l10 * 2 + l11 + 2) >> 2;
-    DST(0,11) = DST(1,13) = DST(2,15) = (l8 + l9 * 2 + l10 + 2) >> 2;
-    DST(0,10) = DST(1,12) = DST(2,14) = (l7 + l8 * 2 + l9 + 2) >> 2;
-    DST(0,9)  = DST(1,11) = DST(2,13) = DST(3,15) = (l6 + l7 * 2 + l8 + 2) >> 2;
-    DST(0,8)  = DST(1,10) = DST(2,12) = DST(3,14) = (l5 + l6 * 2 + l7 + 2) >> 2;
-    DST(0,7)  = DST(1,9)  = DST(2,11) = DST(3,13)  =
-                DST(4,15) = (l4 + l5 * 2 + l6 + 2) >> 2;
-    DST(0,6)  = DST(1,8)  = DST(2,10) = DST(3,12) =
-                DST(4,14) = (l3 + l4 * 2 + l5 + 2) >> 2;
-    DST(0,5)  = DST(1,7)  = DST(2,9)  = DST(3,11) = DST(4,13) =
-                DST(5,15) = (l2 + l3 * 2 + l4 + 2) >> 2;
-    DST(0,4)  = DST(1,6)  = DST(2,8)  = DST(3,10) = DST(4,12) =
-                DST(5,14) = (l1 + l2 * 2 + l3 + 2) >> 2;
-    DST(0,3)  = DST(1,5)  = DST(2,7)  = DST(3,9)  = DST(4,11) = DST(5,13) =
-                DST(6,15) = (l0 + l1 * 2 + l2 + 2) >> 2;
-    DST(0,2)  = DST(1,4)  = DST(2,6)  = DST(3,8)  = DST(4,10) = DST(5,12) =
-                DST(6,14) = (tl + l0 * 2 + l1 + 2) >> 2;
-    DST(0,0)  = DST(1,2)  = DST(2,4)  = DST(3,6)  = DST(4,8)  = DST(5,10) =
-                DST(6,12) = DST(7,14) = (tl + a0 + 1) >> 1;
-    DST(0,1)  = DST(1,3)  = DST(2,5)  = DST(3,7)  = DST(4,9)  = DST(5,11) =
-                DST(6,13) = DST(7,15) = (l0 + tl * 2 + a0 + 2) >> 2;
-    DST(1,0)  = DST(2,2)  = DST(3,4)  = DST(4,6)  = DST(5,8)  = DST(6,10) =
-                DST(7,12) = DST(8,14) = (a0 + a1 + 1) >> 1;
-    DST(1,1)  = DST(2,3)  = DST(3,5)  = DST(4,7)  = DST(5,9)  = DST(6,11) =
-                DST(7,13) = DST(8,15) = (tl + a0 * 2 + a1 + 2) >> 2;
-    DST(2,0)  = DST(3,2)  = DST(4,4)  = DST(5,6)  = DST(6,8)  = DST(7,10) =
-                DST(8,12) = DST(9,14) = (a1 + a2 + 1) >> 1;
-    DST(2,1)  = DST(3,3)  = DST(4,5)  = DST(5,7)  = DST(6,9)  = DST(7,11) =
-                DST(8,13) = DST(9,15) = (a0 + a1 * 2 + a2 + 2) >> 2;
-    DST(3,0)  = DST(4,2)  = DST(5,4)  = DST(6,6)  = DST(7,8)  = DST(8,10) =
-                DST(9,12) = DST(10,14) = (a2 + a3 + 1) >> 1;
-    DST(3,1)  = DST(4,3)  = DST(5,5)  = DST(6,7)  = DST(7,9)  = DST(8,11) =
-                DST(9,13) = DST(10,15) = (a1 + a2 * 2 + a3 + 2) >> 2;
-    DST(4,0)  = DST(5,2)  = DST(6,4)  = DST(7,6)  = DST(8,8)  = DST(9,10) =
-                DST(10,12) = DST(11,14) = (a3 + a4 + 1) >> 1;
-    DST(4,1)  = DST(5,3)  = DST(6,5)  = DST(7,7)  = DST(8,9)  = DST(9,11) =
-                DST(10,13) = DST(11,15) = (a2 + a3 * 2 + a4 + 2) >> 2;
-    DST(5,0)  = DST(6,2)  = DST(7,4)  = DST(8,6)  = DST(9,8)  = DST(10,10) =
-                DST(11,12) = DST(12,14) = (a4 + a5 + 1) >> 1;
-    DST(5,1)  = DST(6,3)  = DST(7,5)  = DST(8,7)  = DST(9,9)  = DST(10,11) =
-                DST(11,13) = DST(12,15) = (a3 + a4 * 2 + a5 + 2) >> 2;
-    DST(6,0)  = DST(7,2)  = DST(8,4)  = DST(9,6)  = DST(10,8) = DST(11,10) =
-                DST(12,12) = DST(13,14) = (a5 + a6 + 1) >> 1;
-    DST(6,1)  = DST(7,3)  = DST(8,5)  = DST(9,7)  = DST(10,9) = DST(11,11) =
-                DST(12,13) = DST(13,15) = (a4 + a5 * 2 + a6 + 2) >> 2;
-    DST(7,0)  = DST(8,2)  = DST(9,4)  = DST(10,6) = DST(11,8) = DST(12,10) =
-                DST(13,12) = DST(14,14) = (a6 + a7 + 1) >> 1;
-    DST(7,1)  = DST(8,3)  = DST(9,5)  = DST(10,7) = DST(11,9) = DST(12,11) =
-                DST(13,13) = DST(14,15) = (a5 + a6 * 2 + a7 + 2) >> 2;
-    DST(8,0)  = DST(9,2)  = DST(10,4) = DST(11,6) = DST(12,8) = DST(13,10) =
-                DST(14,12) = DST(15,14) = (a7 + a8 + 1) >> 1;
-    DST(8,1)  = DST(9,3)  = DST(10,5) = DST(11,7) = DST(12,9) = DST(13,11) =
-                DST(14,13) = DST(15,15) = (a6 + a7 * 2 + a8 + 2) >> 2;
-    DST(9,0)  = DST(10,2) = DST(11,4) = DST(12,6) = DST(13,8) = DST(14,10) =
-                DST(15,12) = (a8 + a9 + 1) >> 1;
-    DST(9,1)  = DST(10,3) = DST(11,5) = DST(12,7) = DST(13,9) = DST(14,11) =
-                DST(15,13) = (a7 + a8 * 2 + a9 + 2) >> 2;
-    DST(10,0) = DST(11,2) = DST(12,4) = DST(13,6) = DST(14,8) =
-                DST(15,10) = (a9 + a10 + 1) >> 1;
-    DST(10,1) = DST(11,3) = DST(12,5) = DST(13,7) = DST(14,9) =
-                DST(15,11) = (a8 + a9 * 2 + a10 + 2) >> 2;
-    DST(11,0) = DST(12,2) = DST(13,4) = DST(14,6) =
-                DST(15,8) = (a10 + a11 + 1) >> 1;
-    DST(11,1) = DST(12,3) = DST(13,5) = DST(14,7) =
-                DST(15,9) = (a9 + a10 * 2 + a11 + 2) >> 2;
-    DST(12,0) = DST(13,2) = DST(14,4) = DST(15,6) = (a11 + a12 + 1) >> 1;
-    DST(12,1) = DST(13,3) = DST(14,5) = DST(15,7) = (a10 + a11 * 2 + a12 + 2) >> 2;
-    DST(13,0) = DST(14,2) = DST(15,4) = (a12 + a13 + 1) >> 1;
-    DST(13,1) = DST(14,3) = DST(15,5) = (a11 + a12 * 2 + a13 + 2) >> 2;
-    DST(14,0) = DST(15,2) = (a13 + a14 + 1) >> 1;
-    DST(14,1) = DST(15,3) = (a12 + a13 * 2 + a14 + 2) >> 2;
-    DST(15,0) = (a14 + a15 + 1) >> 1;
-    DST(15,1) = (a13 + a14 * 2 + a15 + 2) >> 2;
-}
-
-static void vert_right_32x32_c(uint8_t *dst, ptrdiff_t stride,
-                               const uint8_t *left, const uint8_t *top)
-{
-    //..
-}
+def_vert_right(8)
+def_vert_right(16)
+def_vert_right(32)
 
 static void hor_down_4x4_c(uint8_t *dst, ptrdiff_t stride,
                            const uint8_t *left, const uint8_t *top)
@@ -989,133 +712,30 @@ static void hor_down_4x4_c(uint8_t *dst, ptrdiff_t stride,
     DST(1,3) = (l1 + l2 * 2 + l3 + 2) >> 2;
 }
 
-static void hor_down_8x8_c(uint8_t *dst, ptrdiff_t stride,
-                           const uint8_t *left, const uint8_t *top)
-{
-    int l0 = left[0], l1 = left[1], l2 = left[2], l3 = left[3],
-        l4 = left[4], l5 = left[5], l6 = left[6], l7 = left[7],
-        tl = top[-1], a0 = top[0], a1 = top[1], a2 = top[2],
-        a3 = top[3], a4 = top[4], a5 = top[5], a6 = top[6];
-
-    DST(6,0) = (a3 + a4 * 2 + a5 + 2) >> 2;
-    DST(7,0) = (a4 + a5 * 2 + a6 + 2) >> 2;
-    DST(4,0) = DST(6,1) = (a1 + a2 * 2 + a3 + 2) >> 2;
-    DST(5,0) = DST(7,1) = (a2 + a3 * 2 + a4 + 2) >> 2;
-    DST(2,0) = DST(4,1) = DST(6,2) = (tl + a0 * 2 + a1 + 2) >> 2;
-    DST(3,0) = DST(5,1) = DST(7,2) = (a0 + a1 * 2 + a2 + 2) >> 2;
-    DST(0,0) = DST(2,1) = DST(4,2) = DST(6,3) = (tl + l0 + 1) >> 1;
-    DST(1,0) = DST(3,1) = DST(5,2) = DST(7,3) = (a0 + tl * 2 + l0 + 2) >> 2;
-    DST(0,1) = DST(2,2) = DST(4,3) = DST(6,4) = (l0 + l1 + 1) >> 1;
-    DST(1,1) = DST(3,2) = DST(5,3) = DST(7,4) = (tl + l0 * 2 + l1 + 2) >> 2;
-    DST(0,2) = DST(2,3) = DST(4,4) = DST(6,5) = (l1 + l2 + 1) >> 1;
-    DST(1,2) = DST(3,3) = DST(5,4) = DST(7,5) = (l0 + l1 * 2 + l2 + 2) >> 2;
-    DST(0,3) = DST(2,4) = DST(4,5) = DST(6,6) = (l2 + l3 + 1) >> 1;
-    DST(1,3) = DST(3,4) = DST(5,5) = DST(7,6) = (l1 + l2 * 2 + l3 + 2) >> 2;
-    DST(0,4) = DST(2,5) = DST(4,6) = DST(6,7) = (l3 + l4 + 1) >> 1;
-    DST(1,4) = DST(3,5) = DST(5,6) = DST(7,7) = (l2 + l3 * 2 + l4 + 2) >> 2;
-    DST(0,5) = DST(2,6) = DST(4,7) = (l4 + l5 + 1) >> 1;
-    DST(1,5) = DST(3,6) = DST(5,7) = (l3 + l4 * 2 + l5 + 2) >> 2;
-    DST(0,6) = DST(2,7) = (l5 + l6 + 1) >> 1;
-    DST(1,6) = DST(3,7) = (l4 + l5 * 2 + l6 + 2) >> 2;
-    DST(0,7) = (l6 + l7 + 1) >> 1;
-    DST(1,7) = (l5 + l6 * 2 + l7 + 2) >> 2;
+#define def_hor_down(size) \
+static void hor_down_##size##x##size##_c(uint8_t *dst, ptrdiff_t stride, \
+                                         const uint8_t *left, const uint8_t *top) \
+{ \
+    int i, j; \
+    uint8_t v[size * 3 - 2]; \
+\
+    for (i = 0; i < size - 2; i++) { \
+        v[i*2       ] = (left[size - 2 - i] + left[size - 1 - i] + 1) >> 1; \
+        v[i*2    + 1] = (left[size - 3 - i] + left[size - 2 - i] * 2 + left[size - 1 - i] + 2) >> 2; \
+        v[size*2 + i] = (top[i - 1] + top[i] * 2 + top[i + 1] + 2) >> 2; \
+    } \
+    v[size*2 - 2] = (top[-1] + left[0] + 1) >> 1; \
+    v[size*2 - 4] = (left[0] + left[1] + 1) >> 1; \
+    v[size*2 - 1] = (top[0]  + top[-1] * 2 + left[0] + 2) >> 2; \
+    v[size*2 - 3] = (top[-1] + left[0] * 2 + left[1] + 2) >> 2; \
+\
+    for (j = 0; j < size; j++) \
+        memcpy(dst + j*stride, v + size*2 - 2 - j*2, size); \
 }
 
-static void hor_down_16x16_c(uint8_t *dst, ptrdiff_t stride,
-                             const uint8_t *left, const uint8_t *top)
-{
-    int tl = top[-1], a0 = top[0], a1 = top[1], a2 = top[2],
-        a3 = top[3], a4 = top[4], a5 = top[5], a6 = top[6],
-        a7 = top[7], a8 = top[8], a9 = top[9], a10 = top[10],
-        a11 = top[11], a12 = top[12], a13 = top[13], a14 = top[14],
-        l0 = left[0], l1 = left[1], l2 = left[2], l3 = left[3],
-        l4 = left[4], l5 = left[5], l6 = left[6], l7 = left[7],
-        l8 = left[8], l9 = left[9], l10 = left[10], l11 = left[11],
-        l12 = left[12], l13 = left[13], l14 = left[14], l15 = left[15];
-
-    DST(14,0) = (a11 + a12 * 2 + a13 + 2) >> 2;
-    DST(15,0) = (a12 + a13 * 2 + a14 + 2) >> 2;
-    DST(12,0) = DST(14,1) = (a9 + a10 * 2 + a11 + 2) >> 2;
-    DST(13,0) = DST(15,1) = (a10 + a11 * 2 + a12 + 2) >> 2;
-    DST(10,0) = DST(12,1) = DST(14,2) = (a7 + a8 * 2 + a9 + 2) >> 2;
-    DST(11,0) = DST(13,1) = DST(15,2) = (a8 + a9 * 2 + a10 + 2) >> 2;
-    DST(8,0)  = DST(10,1) = DST(12,2) = DST(14,3) = (a5 + a6 * 2 + a7 + 2) >> 2;
-    DST(9,0)  = DST(11,1) = DST(13,2) = DST(15,3) = (a6 + a7 * 2 + a8 + 2) >> 2;
-    DST(6,0)  = DST(8,1)  = DST(10,2) = DST(12,3) =
-                DST(14,4) = (a3 + a4 * 2 + a5 + 2) >> 2;
-    DST(7,0)  = DST(9,1)  = DST(11,2) = DST(13,3) =
-                DST(15,4) = (a4 + a5 * 2 + a6 + 2) >> 2;
-    DST(4,0)  = DST(6,1)  = DST(8,2)  = DST(10,3) = DST(12,4) =
-                DST(14,5) = (a1 + a2 * 2 + a3 + 2) >> 2;
-    DST(5,0)  = DST(7,1)  = DST(9,2)  = DST(11,3) = DST(13,4) =
-                DST(15,5) = (a2 + a3 * 2 + a4 + 2) >> 2;
-    DST(2,0)  = DST(4,1)  = DST(6,2)  = DST(8,3)  = DST(10,4) = DST(12,5) =
-                DST(14,6) = (tl + a0 * 2 + a1 + 2) >> 2;
-    DST(3,0)  = DST(5,1)  = DST(7,2)  = DST(9,3)  = DST(11,4) = DST(13,5) =
-                DST(15,6) = (a0 + a1 * 2 + a2 + 2) >> 2;
-    DST(0,0)  = DST(2,1)  = DST(4,2)  = DST(6,3)  = DST(8,4)  = DST(10,5) =
-                DST(12,6) = DST(14,7) = (tl + l0 + 1) >> 1;
-    DST(1,0)  = DST(3,1)  = DST(5,2)  = DST(7,3)  = DST(9,4)  = DST(11,5) =
-                DST(13,6) = DST(15,7) = (a0 + tl * 2 + l0 + 2) >> 2;
-    DST(0,1)  = DST(2,2)  = DST(4,3)  = DST(6,4)  = DST(8,5)  = DST(10,6) =
-                DST(12,7) = DST(14,8) = (l0 + l1 + 1) >> 1;
-    DST(1,1)  = DST(3,2)  = DST(5,3)  = DST(7,4)  = DST(9,5)  = DST(11,6) =
-                DST(13,7) = DST(15,8) = (tl + l0 * 2 + l1 + 2) >> 2;
-    DST(0,2)  = DST(2,3)  = DST(4,4)  = DST(6,5)  = DST(8,6)  = DST(10,7) =
-                DST(12,8) = DST(14,9) = (l1 + l2 + 1) >> 1;
-    DST(1,2)  = DST(3,3)  = DST(5,4)  = DST(7,5)  = DST(9,6)  = DST(11,7) =
-                DST(13,8) = DST(15,9) = (l0 + l1 * 2 + l2 + 2) >> 2;
-    DST(0,3)  = DST(2,4)  = DST(4,5)  = DST(6,6)  = DST(8,7)  = DST(10,8) =
-                DST(12,9) = DST(14,10) = (l2 + l3 + 1) >> 1;
-    DST(1,3)  = DST(3,4)  = DST(5,5)  = DST(7,6)  = DST(9,7)  = DST(11,8) =
-                DST(13,9) = DST(15,10) = (l1 + l2 * 2 + l3 + 2) >> 2;
-    DST(0,4)  = DST(2,5)  = DST(4,6)  = DST(6,7)  = DST(8,8)  = DST(10,9) =
-                DST(12,10) = DST(14,11) = (l3 + l4 + 1) >> 1;
-    DST(1,4)  = DST(3,5)  = DST(5,6)  = DST(7,7)  = DST(9,8)  = DST(11,9) =
-                DST(13,10) = DST(15,11) = (l2 + l3 * 2 + l4 + 2) >> 2;
-    DST(0,5)  = DST(2,6)  = DST(4,7)  = DST(6,8)  = DST(8,9)  = DST(10,10) =
-                DST(12,11) = DST(14,12) = (l4 + l5 + 1) >> 1;
-    DST(1,5)  = DST(3,6)  = DST(5,7)  = DST(7,8)  = DST(9,9)  = DST(11,10) =
-                DST(13,11) = DST(15,12) = (l3 + l4 * 2 + l5 + 2) >> 2;
-    DST(0,6)  = DST(2,7)  = DST(4,8)  = DST(6,9)  = DST(8,10) = DST(10,11) =
-                DST(12,12) = DST(14,13) = (l5 + l6 + 1) >> 1;
-    DST(1,6)  = DST(3,7)  = DST(5,8)  = DST(7,9)  = DST(9,10) = DST(11,11) =
-                DST(13,12) = DST(15,13) = (l4 + l5 * 2 + l6 + 2) >> 2;
-    DST(0,7)  = DST(2,8)  = DST(4,9)  = DST(6,10) = DST(8,11) = DST(10,12) =
-                DST(12,13) = DST(14,14) = (l6 + l7 + 1) >> 1;
-    DST(1,7)  = DST(3,8)  = DST(5,9)  = DST(7,10) = DST(9,11) = DST(11,12) =
-                DST(13,13) = DST(15,14) = (l5 + l6 * 2 + l7 + 2) >> 2;
-    DST(0,8)  = DST(2,9)  = DST(4,10) = DST(6,11) = DST(8,12) = DST(10,13) =
-                DST(12,14) = DST(14,15) = (l7 + l8 + 1) >> 1;
-    DST(1,8)  = DST(3,9)  = DST(5,10) = DST(7,11) = DST(9,12) = DST(11,13) =
-                DST(13,14) = DST(15,15) = (l6 + l7 * 2 + l8 + 2) >> 2;
-    DST(0,9)  = DST(2,10) = DST(4,11) = DST(6,12) = DST(8,13) = DST(10,14) =
-                DST(12,15) = (l8 + l9 + 1) >> 1;
-    DST(1,9)  = DST(3,10) = DST(5,11) = DST(7,12) = DST(9,13) = DST(11,14) =
-                DST(13,15) = (l7 + l8 * 2 + l9 + 2) >> 2;
-    DST(0,10) = DST(2,11) = DST(4,12) = DST(6,13) = DST(8,14) =
-                DST(10,15) = (l9 + l10 + 1) >> 1;
-    DST(1,10) = DST(3,11) = DST(5,12) = DST(7,13) = DST(9,14) =
-                DST(11,15) = (l8 + l9 * 2 + l10 + 2) >> 2;
-    DST(0,11) = DST(2,12) = DST(4,13) = DST(6,14) =
-                DST(8,15) = (l10 + l11 + 1) >> 1;
-    DST(1,11) = DST(3,12) = DST(5,13) = DST(7,14) =
-                DST(9,15) = (l9 + l10 * 2 + l11 + 2) >> 2;
-    DST(0,12) = DST(2,13) = DST(4,14) = DST(6,15) = (l11 + l12 + 1) >> 1;
-    DST(1,12) = DST(3,13) = DST(5,14) = DST(7,15) = (l10 + l11 * 2 + l12 + 2) >> 2;
-    DST(0,13) = DST(2,14) = DST(4,15) = (l12 + l13 + 1) >> 1;
-    DST(1,13) = DST(3,14) = DST(5,15) = (l11 + l12 * 2 + l13 + 2) >> 2;
-    DST(0,14) = DST(2,15) = (l13 + l14 + 1) >> 1;
-    DST(1,14) = DST(3,15) = (l12 + l13 * 2 + l14 + 2) >> 2;
-    DST(0,15) = (l14 + l15 + 1) >> 1;
-    DST(1,15) = (l13 + l14 * 2 + l15 + 2) >> 2;
-}
-
-static void hor_down_32x32_c(uint8_t *dst, ptrdiff_t stride,
-                             const uint8_t *left, const uint8_t *top)
-{
-    //..
-}
+def_hor_down(8)
+def_hor_down(16)
+def_hor_down(32)
 
 static void vert_left_4x4_c(uint8_t *dst, ptrdiff_t stride,
                             const uint8_t *left, const uint8_t *top)
@@ -1135,114 +755,31 @@ static void vert_left_4x4_c(uint8_t *dst, ptrdiff_t stride,
     DST(3,3) = (a4 + a5 * 2 + a6 + 2) >> 2;
 }
 
-static void vert_left_8x8_c(uint8_t *dst, ptrdiff_t stride,
-                            const uint8_t *left, const uint8_t *top)
-{
-    int a0 = top[0], a1 = top[1], a2 = top[2], a3 = top[3],
-        a4 = top[4], a5 = top[5], a6 = top[6], a7 = top[7];
-
-    DST(0,0) = (a0 + a1 + 1) >> 1;
-    DST(0,1) = (a0 + a1 * 2 + a2 + 2) >> 2;
-    DST(1,0) = DST(0,2) = (a1 + a2 + 1) >> 1;
-    DST(1,1) = DST(0,3) = (a1 + a2 * 2 + a3 + 2) >> 2;
-    DST(2,0) = DST(1,2) = DST(0,4) = (a2 + a3 + 1) >> 1;
-    DST(2,1) = DST(1,3) = DST(0,5) = (a2 + a3 * 2 + a4 + 2) >> 2;
-    DST(3,0) = DST(2,2) = DST(1,4) = DST(0,6) = (a3 + a4 + 1) >> 1;
-    DST(3,1) = DST(2,3) = DST(1,5) = DST(0,7) = (a3 + a4 * 2 + a5 + 2) >> 2;
-    DST(4,0) = DST(3,2) = DST(2,4) = DST(1,6) = (a4 + a5 + 1) >> 1;
-    DST(4,1) = DST(3,3) = DST(2,5) = DST(1,7) = (a4 + a5 * 2 + a6 + 2) >> 2;
-    DST(5,0) = DST(4,2) = DST(3,4) = DST(2,6) = (a5 + a6 + 1) >> 1;
-    DST(5,1) = DST(4,3) = DST(3,5) = DST(2,7) = (a5 + a6 * 2 + a7 + 2) >> 2;
-    DST(6,0) = DST(5,2) = DST(4,4) = DST(3,6) = (a6 + a7 + 1) >> 1;
-    DST(6,1) = DST(5,3) = DST(4,5) = DST(3,7) = (a6 + a7 * 3 + 2) >> 2;
-    DST(7,0) = DST(7,1) = DST(6,2) = DST(7,2) = DST(6,3) = DST(7,3) =
-               DST(5,4) = DST(6,4) = DST(7,4) = DST(5,5) = DST(6,5) =
-               DST(7,5) = DST(4,6) = DST(5,6) = DST(6,6) = DST(7,6) =
-               DST(4,7) = DST(5,7) = DST(6,7) = DST(7,7) = a7;
+#define def_vert_left(size) \
+static void vert_left_##size##x##size##_c(uint8_t *dst, ptrdiff_t stride, \
+                                          const uint8_t *left, const uint8_t *top) \
+{ \
+    int i, j; \
+    uint8_t ve[size - 1], vo[size - 1]; \
+\
+    for (i = 0; i < size - 2; i++) { \
+        ve[i] = (top[i] + top[i + 1] + 1) >> 1; \
+        vo[i] = (top[i] + top[i + 1] * 2 + top[i + 2] + 2) >> 2; \
+    } \
+    ve[size - 2] = (top[size - 2] + top[size - 1] + 1) >> 1; \
+    vo[size - 2] = (top[size - 2] + top[size - 1] * 3 + 2) >> 2; \
+\
+    for (j = 0; j < size / 2; j++) { \
+        memcpy(dst +  j*2      * stride, ve + j, size - j); \
+        memset(dst +  j*2      * stride + size - j - 1, top[size - 1], j + 1); \
+        memcpy(dst + (j*2 + 1) * stride, vo + j, size - j); \
+        memset(dst + (j*2 + 1) * stride + size - j - 1, top[size - 1], j + 1); \
+    } \
 }
 
-static void vert_left_16x16_c(uint8_t *dst, ptrdiff_t stride,
-                              const uint8_t *left, const uint8_t *top)
-{
-    int a0 = top[0], a1 = top[1], a2 = top[2], a3 = top[3],
-        a4 = top[4], a5 = top[5], a6 = top[6], a7 = top[7],
-        a8 = top[8], a9 = top[9], a10 = top[10], a11 = top[11],
-        a12 = top[12], a13 = top[13], a14 = top[14], a15 = top[15];
-
-    DST(0,0)  = (a0 + a1 + 1) >> 1;
-    DST(0,1)  = (a0 + a1 * 2 + a2 + 2) >> 2;
-    DST(1,0)  = DST(0,2)  = (a1 + a2 + 1) >> 1;
-    DST(1,1)  = DST(0,3)  = (a1 + a2 * 2 + a3 + 2) >> 2;
-    DST(2,0)  = DST(1,2)  = DST(0,4)  = (a2 + a3 + 1) >> 1;
-    DST(2,1)  = DST(1,3)  = DST(0,5)  = (a2 + a3 * 2 + a4 + 2) >> 2;
-    DST(3,0)  = DST(2,2)  = DST(1,4)  = DST(0,6)  = (a3 + a4 + 1) >> 1;
-    DST(3,1)  = DST(2,3)  = DST(1,5)  = DST(0,7)  = (a3 + a4 * 2 + a5 + 2) >> 2;
-    DST(4,0)  = DST(3,2)  = DST(2,4)  = DST(1,6)  =
-                DST(0,8) = (a4 + a5 + 1) >> 1;
-    DST(4,1)  = DST(3,3)  = DST(2,5)  = DST(1,7)  =
-                DST(0,9) = (a4 + a5 * 2 + a6 + 2) >> 2;
-    DST(5,0)  = DST(4,2)  = DST(3,4)  = DST(2,6)  = DST(1,8)  =
-                DST(0,10) = (a5 + a6 + 1) >> 1;
-    DST(5,1)  = DST(4,3)  = DST(3,5)  = DST(2,7)  = DST(1,9)  =
-                DST(0,11) = (a5 + a6 * 2 + a7 + 2) >> 2;
-    DST(6,0)  = DST(5,2)  = DST(4,4)  = DST(3,6)  = DST(2,8)  = DST(1,10) =
-                DST(0,12) = (a6 + a7 + 1) >> 1;
-    DST(6,1)  = DST(5,3)  = DST(4,5)  = DST(3,7)  = DST(2,9)  = DST(1,11) =
-                DST(0,13) = (a6 + a7 * 2 + a8 + 2) >> 2;
-    DST(7,0)  = DST(6,2)  = DST(5,4)  = DST(4,6)  = DST(3,8)  = DST(2,10) =
-                DST(1,12) = DST(0,14) = (a7 + a8 + 1) >> 1;
-    DST(7,1)  = DST(6,3)  = DST(5,5)  = DST(4,7)  = DST(3,9)  = DST(2,11) =
-                DST(1,13) = DST(0,15) = (a7 + a8 * 2 + a9 + 2) >> 2;
-    DST(8,0)  = DST(7,2)  = DST(6,4)  = DST(5,6)  = DST(4,8)  = DST(3,10) =
-                DST(2,12) = DST(1,14) = (a8 + a9 + 1) >> 1;
-    DST(8,1)  = DST(7,3)  = DST(6,5)  = DST(5,7)  = DST(4,9)  = DST(3,11) =
-                DST(2,13) = DST(1,15) = (a8 + a9 * 2 + a10 + 2) >> 2;
-    DST(9,0)  = DST(8,2)  = DST(7,4)  = DST(6,6)  = DST(5,8)  = DST(4,10) =
-                DST(3,12) = DST(2,14) = (a9 + a10 + 1) >> 1;
-    DST(9,1)  = DST(8,3)  = DST(7,5)  = DST(6,7)  = DST(5,9)  = DST(4,11) =
-                DST(3,13) = DST(2,15) = (a9 + a10 * 2 + a11 + 2) >> 2;
-    DST(10,0) = DST(9,2)  = DST(8,4)  = DST(7,6)  = DST(6,8)  = DST(5,10) =
-                DST(4,12) = DST(3,14) = (a10 + a11 + 1) >> 1;
-    DST(10,1) = DST(9,3)  = DST(8,5)  = DST(7,7)  = DST(6,9)  = DST(5,11) =
-                DST(4,13) = DST(3,15) = (a10 + a11 * 2 + a12 + 2) >> 2;
-    DST(11,0) = DST(10,2) = DST(9,4)  = DST(8,6)  = DST(7,8)  = DST(6,10) =
-                DST(5,12) = DST(4,14) = (a11 + a12 + 1) >> 1;
-    DST(11,1) = DST(10,3) = DST(9,5)  = DST(8,7)  = DST(7,9)  = DST(6,11) =
-                DST(5,13) = DST(4,15) = (a11 + a12 * 2 + a13 + 2) >> 2;
-    DST(12,0) = DST(11,2) = DST(10,4) = DST(9,6)  = DST(8,8)  = DST(7,10) =
-                DST(6,12) = DST(5,14) = (a12 + a13 + 1) >> 1;
-    DST(12,1) = DST(11,3) = DST(10,5) = DST(9,7)  = DST(8,9)  = DST(7,11) =
-                DST(6,13) = DST(5,15) = (a12 + a13 * 2 + a14 + 2) >> 2;
-    DST(13,0) = DST(12,2) = DST(11,4) = DST(10,6) = DST(9,8)  = DST(8,10) =
-                DST(7,12) = DST(6,14) = (a13 + a14 + 1) >> 1;
-    DST(13,1) = DST(12,3) = DST(11,5) = DST(10,7) = DST(9,9)  = DST(8,11) =
-                DST(7,13) = DST(6,15) = (a13 + a14 * 2 + a15 + 2) >> 2;
-    DST(14,0) = DST(13,2) = DST(12,4) = DST(11,6) = DST(10,8) = DST(9,10) =
-                DST(8,12) = DST(7,14) = (a14 + a15 + 1) >> 1;
-    DST(14,1) = DST(13,3) = DST(12,5) = DST(11,7) = DST(10,9) = DST(9,11) =
-                DST(8,13) = DST(7,15) = (a14 + a15 * 3 + 2) >> 2;
-    DST(15,0) = DST(15,1) = DST(14,2) = DST(15,2) = DST(14,3) = DST(15,3) =
-                DST(13,4) = DST(14,4) = DST(15,4) = DST(13,5) = DST(14,5) =
-                DST(15,5) = DST(12,6) = DST(13,6) = DST(14,6) = DST(15,6) =
-                DST(12,7) = DST(13,7) = DST(14,7) = DST(15,7) = DST(11,8) =
-                DST(12,8) = DST(13,8) = DST(14,8) = DST(15,8) = DST(11,9) =
-                DST(12,9) = DST(13,9) = DST(14,9) = DST(15,9) = DST(10,10) =
-                DST(11,10) = DST(12,10) = DST(13,10) = DST(14,10) = DST(15,10) =
-                DST(10,11) = DST(11,11) = DST(12,11) = DST(13,11) = DST(14,11) =
-                DST(15,11) = DST(9,12) = DST(10,12) = DST(11,12) = DST(12,12) =
-                DST(13,12) = DST(14,12) = DST(15,12) = DST(9,13) = DST(10,13) =
-                DST(11,13) = DST(12,13) = DST(13,13) = DST(14,13) = DST(15,13) =
-                DST(8,14) = DST(9,14) = DST(10,14) = DST(11,14) = DST(12,14) =
-                DST(13,14) = DST(14,14) = DST(15,14) = DST(8,15) = DST(9,15) =
-                DST(10,15) = DST(11,15) = DST(12,15) = DST(13,15) = DST(14,15) =
-                DST(15,15) = a15;
-}
-
-static void vert_left_32x32_c(uint8_t *dst, ptrdiff_t stride,
-                              const uint8_t *left, const uint8_t *top)
-{
-    //..
-}
+def_vert_left(8)
+def_vert_left(16)
+def_vert_left(32)
 
 static void hor_up_4x4_c(uint8_t *dst, ptrdiff_t stride,
                          const uint8_t *left, const uint8_t *top)
@@ -1258,114 +795,31 @@ static void hor_up_4x4_c(uint8_t *dst, ptrdiff_t stride,
     DST(0,3) = DST(1,3) = DST(2,2) = DST(2,3) = DST(3,2) = DST(3,3) = l3;
 }
 
-static void hor_up_8x8_c(uint8_t *dst, ptrdiff_t stride,
-                         const uint8_t *left, const uint8_t *top)
-{
-    int l0 = left[0], l1 = left[1], l2 = left[2], l3 = left[3],
-        l4 = left[4], l5 = left[5], l6 = left[6], l7 = left[7];
-
-    DST(0,0) = (l0 + l1 + 1) >> 1;
-    DST(1,0) = (l0 + l1 * 2 + l2 + 2) >> 2;
-    DST(0,1) = DST(2,0) = (l1 + l2 + 1) >> 1;
-    DST(1,1) = DST(3,0) = (l1 + l2 * 2 + l3 + 2) >> 2;
-    DST(0,2) = DST(2,1) = DST(4,0) = (l2 + l3 + 1) >> 1;
-    DST(1,2) = DST(3,1) = DST(5,0) = (l2 + l3 * 2 + l4 + 2) >> 2;
-    DST(0,3) = DST(2,2) = DST(4,1) = DST(6,0) = (l3 + l4 + 1) >> 1;
-    DST(1,3) = DST(3,2) = DST(5,1) = DST(7,0) = (l3 + l4 * 2 + l5 + 2) >> 2;
-    DST(0,4) = DST(2,3) = DST(4,2) = DST(6,1) = (l4 + l5 + 1) >> 1;
-    DST(1,4) = DST(3,3) = DST(5,2) = DST(7,1) = (l4 + l5 * 2 + l6 + 2) >> 2;
-    DST(0,5) = DST(2,4) = DST(4,3) = DST(6,2) = (l5 + l6 + 1) >> 1;
-    DST(1,5) = DST(3,4) = DST(5,3) = DST(7,2) = (l5 + l6 * 2 + l7 + 2) >> 2;
-    DST(0,6) = DST(2,5) = DST(4,4) = DST(6,3) = (l6 + l7 + 1) >> 1;
-    DST(1,6) = DST(3,5) = DST(5,4) = DST(7,3) = (l6 + l7 * 3 + 2) >> 2;
-    DST(0,7) = DST(1,7) = DST(2,6) = DST(2,7) = DST(3,6) = DST(3,7) =
-               DST(4,5) = DST(4,6) = DST(4,7) = DST(5,5) = DST(5,6) =
-               DST(5,7) = DST(6,4) = DST(6,5) = DST(6,6) = DST(6,7) =
-               DST(7,4) = DST(7,5) = DST(7,6) = DST(7,7) = l7;
+#define def_hor_up(size) \
+static void hor_up_##size##x##size##_c(uint8_t *dst, ptrdiff_t stride, \
+                                       const uint8_t *left, const uint8_t *top) \
+{ \
+    int i, j; \
+    uint8_t v[size*2 - 2]; \
+\
+    for (i = 0; i < size - 2; i++) { \
+        v[i*2    ] = (left[i] + left[i + 1] + 1) >> 1; \
+        v[i*2 + 1] = (left[i] + left[i + 1] * 2 + left[i + 2] + 2) >> 2; \
+    } \
+    v[size*2 - 4] = (left[size - 2] + left[size - 1] + 1) >> 1; \
+    v[size*2 - 3] = (left[size - 2] + left[size - 1] * 3 + 2) >> 2; \
+\
+    for (j = 0; j < size / 2; j++) \
+        memcpy(dst + j*stride, v + j*2, size); \
+    for (j = size / 2; j < size; j++) { \
+        memcpy(dst + j*stride, v + j*2, size*2 - 2 - j*2); \
+        memset(dst + j*stride + size*2 - 2 - j*2, left[size - 1], j + 1); \
+    } \
 }
 
-static void hor_up_16x16_c(uint8_t *dst, ptrdiff_t stride,
-                           const uint8_t *left, const uint8_t *top)
-{
-    int l0 = left[0], l1 = left[1], l2 = left[2], l3 = left[3],
-        l4 = left[4], l5 = left[5], l6 = left[6], l7 = left[7],
-        l8 = left[8], l9 = left[9], l10 = left[10], l11 = left[11],
-        l12 = left[12], l13 = left[13], l14 = left[14], l15 = left[15];
-
-    DST(0,0)  = (l0 + l1 + 1) >> 1;
-    DST(1,0)  = (l0 + l1 * 2 + l2 + 2) >> 2;
-    DST(0,1)  = DST(2,0)  = (l1 + l2 + 1) >> 1;
-    DST(1,1)  = DST(3,0)  = (l1 + l2 * 2 + l3 + 2) >> 2;
-    DST(0,2)  = DST(2,1)  = DST(4,0)  = (l2 + l3 + 1) >> 1;
-    DST(1,2)  = DST(3,1)  = DST(5,0)  = (l2 + l3 * 2 + l4 + 2) >> 2;
-    DST(0,3)  = DST(2,2)  = DST(4,1)  = DST(6,0)  = (l3 + l4 + 1) >> 1;
-    DST(1,3)  = DST(3,2)  = DST(5,1)  = DST(7,0)  = (l3 + l4 * 2 + l5 + 2) >> 2;
-    DST(0,4)  = DST(2,3)  = DST(4,2)  = DST(6,1)  =
-                DST(8,0)  = (l4 + l5 + 1) >> 1;
-    DST(1,4)  = DST(3,3)  = DST(5,2)  = DST(7,1)  =
-                DST(9,0)  = (l4 + l5 * 2 + l6 + 2) >> 2;
-    DST(0,5)  = DST(2,4)  = DST(4,3)  = DST(6,2)  = DST(8,1)  =
-                DST(10,0) = (l5 + l6 + 1) >> 1;
-    DST(1,5)  = DST(3,4)  = DST(5,3)  = DST(7,2)  = DST(9,1)  =
-                DST(11,0) = (l5 + l6 * 2 + l7 + 2) >> 2;
-    DST(0,6)  = DST(2,5)  = DST(4,4)  = DST(6,3)  = DST(8,2)  = DST(10,1) =
-                DST(12,0) = (l6 + l7 + 1) >> 1;
-    DST(1,6)  = DST(3,5)  = DST(5,4)  = DST(7,3)  = DST(9,2)  = DST(11,1) =
-                DST(13,0) = (l6 + l7 * 2 + l8 + 2) >> 2;
-    DST(0,7)  = DST(2,6)  = DST(4,5)  = DST(6,4)  = DST(8,3)  = DST(10,2) =
-                DST(12,1) = DST(14,0) = (l7 + l8 + 1) >> 1;
-    DST(1,7)  = DST(3,6)  = DST(5,5)  = DST(7,4)  = DST(9,3)  = DST(11,2) =
-                DST(13,1) = DST(15,0) = (l7 + l8 * 2 + l9 + 2) >> 2;
-    DST(0,8)  = DST(2,7)  = DST(4,6)  = DST(6,5)  = DST(8,4)  = DST(10,3) =
-                DST(12,2) = DST(14,1) = (l8 + l9 + 1) >> 1;
-    DST(1,8)  = DST(3,7)  = DST(5,6)  = DST(7,5)  = DST(9,4)  = DST(11,3) =
-                DST(13,2) = DST(15,1) = (l8 + l9 * 2 + l10 + 2) >> 2;
-    DST(0,9)  = DST(2,8)  = DST(4,7)  = DST(6,6)  = DST(8,5)  = DST(10,4) =
-                DST(12,3) = DST(14,2) = (l9 + l10 + 1) >> 1;
-    DST(1,9)  = DST(3,8)  = DST(5,7)  = DST(7,6)  = DST(9,5)  = DST(11,4) =
-                DST(13,3) = DST(15,2) = (l9 + l10 * 2 + l11 + 2) >> 2;
-    DST(0,10) = DST(2,9)  = DST(4,8)  = DST(6,7)  = DST(8,6)  = DST(10,5) =
-                DST(12,4) = DST(14,3) = (l10 + l11 + 1) >> 1;
-    DST(1,10) = DST(3,9)  = DST(5,8)  = DST(7,7)  = DST(9,6)  = DST(11,5) =
-                DST(13,4) = DST(15,3) = (l10 + l11 * 2 + l12 + 2) >> 2;
-    DST(0,11) = DST(2,10) = DST(4,9)  = DST(6,8)  = DST(8,7)  = DST(10,6) =
-                DST(12,5) = DST(14,4) = (l11 + l12 + 1) >> 1;
-    DST(1,11) = DST(3,10) = DST(5,9)  = DST(7,8)  = DST(9,7)  = DST(11,6) =
-                DST(13,5) = DST(15,4) = (l11 + l12 * 2 + l13 + 2) >> 2;
-    DST(0,12) = DST(2,11) = DST(4,10) = DST(6,9)  = DST(8,8)  = DST(10,7) =
-                DST(12,6) = DST(14,5) = (l12 + l13 + 1) >> 1;
-    DST(1,12) = DST(3,11) = DST(5,10) = DST(7,9)  = DST(9,8)  = DST(11,7) =
-                DST(13,6) = DST(15,5) = (l12 + l13 * 2 + l14 + 2) >> 2;
-    DST(0,13) = DST(2,12) = DST(4,11) = DST(6,10) = DST(8,9)  = DST(10,8) =
-                DST(12,7) = DST(14,6) = (l13 + l14 + 1) >> 1;
-    DST(1,13) = DST(3,12) = DST(5,11) = DST(7,10) = DST(9,9)  = DST(11,8) =
-                DST(13,7) = DST(15,6) = (l13 + l14 * 2 + l15 + 2) >> 2;
-    DST(0,14) = DST(2,13) = DST(4,12) = DST(6,11) = DST(8,10) = DST(10,9) =
-                DST(12,8) = DST(14,7) = (l14 + l15 + 1) >> 1;
-    DST(1,14) = DST(3,13) = DST(5,12) = DST(7,11) = DST(9,10) = DST(11,9) =
-                DST(13,8) = DST(15,7) = (l14 + l15 * 3 + 2) >> 2;
-    DST(0,15) = DST(1,15) = DST(2,14) = DST(2,15) = DST(3,14) = DST(3,15) =
-                DST(4,13) = DST(4,14) = DST(4,15) = DST(5,13) = DST(5,14) =
-                DST(5,15) = DST(6,12) = DST(6,13) = DST(6,14) = DST(6,15) =
-                DST(7,12) = DST(7,13) = DST(7,14) = DST(7,15) = DST(8,11) =
-                DST(8,12) = DST(8,13) = DST(8,14) = DST(8,15) = DST(9,11) =
-                DST(9,12) = DST(9,13) = DST(9,14) = DST(9,15) = DST(10,10) =
-                DST(10,11) = DST(10,12) = DST(10,13) = DST(10,14) = DST(10,15) =
-                DST(11,10) = DST(11,11) = DST(11,12) = DST(11,13) = DST(11,14) =
-                DST(11,15) = DST(12,9) = DST(12,10) = DST(12,11) = DST(12,12) =
-                DST(12,13) = DST(12,14) = DST(12,15) = DST(13,9) = DST(13,10) =
-                DST(13,11) = DST(13,12) = DST(13,13) = DST(13,14) = DST(13,15) =
-                DST(14,8) = DST(14,9) = DST(14,10) = DST(14,11) = DST(14,12) =
-                DST(14,13) = DST(14,14) = DST(14,15) = DST(15,8) = DST(15,9) =
-                DST(15,10) = DST(15,11) = DST(15,12) = DST(15,13) = DST(15,14) =
-                DST(15,15) = l15;
-}
-
-static void hor_up_32x32_c(uint8_t *dst, ptrdiff_t stride,
-                           const uint8_t *left, const uint8_t *top)
-{
-    //..
-}
+def_hor_up(8)
+def_hor_up(16)
+def_hor_up(32)
 
 #undef DST
 
