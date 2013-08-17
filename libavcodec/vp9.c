@@ -1813,15 +1813,17 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
 
                 // backup pre-loopfilter reconstruction data for intra
                 // prediction of next row of sb64s
-                memcpy(s->intra_pred_data[0] + s->tiling.tile_col_start * 8,
-                       s->f->data[0] + yoff2 + 63 * s->f->linesize[0],
-                       64 * s->sb_cols);
-                memcpy(s->intra_pred_data[1] + s->tiling.tile_col_start * 4,
-                       s->f->data[1] + uvoff2 + 31 * s->f->linesize[1],
-                       32 * s->sb_cols);
-                memcpy(s->intra_pred_data[2] + s->tiling.tile_col_start * 4,
-                       s->f->data[2] + uvoff2 + 31 * s->f->linesize[2],
-                       32 * s->sb_cols);
+                if (row + 8 < s->tiling.tile_row_end) {
+                    memcpy(s->intra_pred_data[0] + s->tiling.tile_col_start * 8,
+                           s->f->data[0] + yoff2 + 63 * s->f->linesize[0],
+                           8 * s->cols);
+                    memcpy(s->intra_pred_data[1] + s->tiling.tile_col_start * 4,
+                           s->f->data[1] + uvoff2 + 31 * s->f->linesize[1],
+                           4 * s->cols);
+                    memcpy(s->intra_pred_data[2] + s->tiling.tile_col_start * 4,
+                           s->f->data[2] + uvoff2 + 31 * s->f->linesize[2],
+                           4 * s->cols);
+                }
 
                 // loopfilter one row
                 if (s->filter.level) {
