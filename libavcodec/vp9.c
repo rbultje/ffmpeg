@@ -1054,7 +1054,7 @@ static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **
                                              int p)
 {
     // FIXME make work with tiling enabled (have_left check is wrong)
-    int have_top = row * 2 + y > 0, have_left = col * 2 + x > 0, have_topright = x < w - 1;
+    int have_top = row * 2 + y > 0, have_left = col * 2 + x > 0, have_right = x < w - 1;
     static const uint8_t mode_conv[10][2 /* have_left */][2 /* have_top */] = {
         [VERT_PRED]            = { { DC_127_PRED,          VERT_PRED },
                                    { DC_127_PRED,          VERT_PRED } },
@@ -1114,7 +1114,7 @@ static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **
 
         if (have_top &&
             (!edges[mode].needs_topleft || have_left) &&
-            (tx != TX_4X4 || !edges[mode].needs_topright || have_topright)) {
+            (tx != TX_4X4 || !edges[mode].needs_topright || have_right)) {
             *a = top;
         } else {
             if (have_top) {
@@ -1130,7 +1130,7 @@ static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **
                 }
             }
             if (tx == TX_4X4 && edges[mode].needs_topright) {
-                if (have_topright) {
+                if (have_top && have_right) {
                     memcpy(&(*a)[4], &top[4], 4);
                 } else {
                     memset(&(*a)[4], (*a)[3], 4);
