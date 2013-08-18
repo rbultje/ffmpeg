@@ -209,6 +209,38 @@ static const uint8_t vp9_default_kf_uvmode_probs[10][9] = {
     { 102,  19,  66, 162, 182, 122,  35,  59, 128 } /* y = tm */
 };
 
+enum InterPredMode {
+    NEARESTMV = 10,
+    NEARMV,
+    ZEROMV,
+    NEWMV,
+};
+
+static const int8_t vp9_inter_mode_tree[3][2] = {
+    { -ZEROMV, 1 },        // '0'
+     { -NEARESTMV, 2 },    // '10'
+      { -NEARMV, -NEWMV }, // '11x'
+};
+
+static const int8_t vp9_filter_tree[2][2] = {
+    { -0, 1 },   // '0'
+     { -1, -2 }, // '1x'
+};
+
+enum FilterMode {
+    FILTER_8TAP_SMOOTH,
+    FILTER_8TAP_REGULAR,
+    FILTER_8TAP_SHARP,
+    FILTER_BILINEAR,
+    FILTER_SWITCHABLE,
+};
+
+static const enum FilterMode vp9_filter_lut[3] = {
+    FILTER_8TAP_REGULAR,
+    FILTER_8TAP_SMOOTH,
+    FILTER_8TAP_SHARP,
+};
+
 static const int16_t vp9_dc_qlookup[256] = {
        4,    8,    8,    9,   10,   11,   12,   12,
       13,   14,   15,   16,   17,   18,   19,   19,
@@ -1377,26 +1409,26 @@ static const prob_context vp9_default_probs = {
             128, /* hp */
         }
     }, { /* partition */
-        { /* 8x8 -> 4x4 */
-            { 199, 122, 141 } /* a/l both not split */,
-            { 147,  63, 159 } /* a split, l not split */,
-            { 148, 133, 118 } /* l split, a not split */,
-            { 121, 104, 114 } /* a/l both split */,
-        }, { /* 16x16 -> 8x8 */
-            { 174,  73,  87 } /* a/l both not split */,
-            {  92,  41,  83 } /* a split, l not split */,
-            {  82,  99,  50 } /* l split, a not split */,
-            {  53,  39,  39 } /* a/l both split */,
+        { /* 64x64 -> 32x32 */
+            { 222,  34,  30 } /* a/l both not split */,
+            {  72,  16,  44 } /* a split, l not split */,
+            {  58,  32,  12 } /* l split, a not split */,
+            {  10,   7,   6 } /* a/l both split */,
         }, { /* 32x32 -> 16x16 */
             { 177,  58,  59 } /* a/l both not split */,
             {  68,  26,  63 } /* a split, l not split */,
             {  52,  79,  25 } /* l split, a not split */,
             {  17,  14,  12 } /* a/l both split */,
-        }, { /* 64x64 -> 32x32 */
-            { 222,  34,  30 } /* a/l both not split */,
-            {  72,  16,  44 } /* a split, l not split */,
-            {  58,  32,  12 } /* l split, a not split */,
-            {  10,   7,   6 } /* a/l both split */
+        }, { /* 16x16 -> 8x8 */
+            { 174,  73,  87 } /* a/l both not split */,
+            {  92,  41,  83 } /* a split, l not split */,
+            {  82,  99,  50 } /* l split, a not split */,
+            {  53,  39,  39 } /* a/l both split */,
+        }, { /* 8x8 -> 4x4 */
+            { 199, 122, 141 } /* a/l both not split */,
+            { 147,  63, 159 } /* a split, l not split */,
+            { 148, 133, 118 } /* l split, a not split */,
+            { 121, 104, 114 } /* a/l both split */,
         }
     },
 };
@@ -2083,6 +2115,38 @@ static const uint8_t vp9_default_coef_probs[4][2][2][6][6][3] = {
             }
         }
     }
+};
+
+enum MVJoint {
+    MV_JOINT_ZERO,
+    MV_JOINT_H,
+    MV_JOINT_V,
+    MV_JOINT_HV,
+};
+
+static const int8_t vp9_mv_joint_tree[3][2] = {
+    { -MV_JOINT_ZERO, 1 },            // '0'
+     { -MV_JOINT_H, 2 },              // '10'
+      { -MV_JOINT_V, - MV_JOINT_HV }, // '11x'
+};
+
+static const int8_t vp9_mv_class_tree[10][2] = {
+    { -0, 1 },         // '0'
+     { -1, 2 },        // '10'
+      { 3, 4 },
+       { -2, -3 },     // '110x'
+       { 5, 6 },
+        { -4, -5 },    // '1110x'
+        { -6, 7 },     // '11110'
+         { 8, 9 },
+          { -7, -8 },  // '111110x'
+          { -9, -10 }, // '111111x'
+};
+
+static const int8_t vp9_mv_fp_tree[3][2] = {
+    { -0, 1 },    // '0'
+     { -1, 2 },   // '10'
+      { -2, -3 }, // '11x'
 };
 
 #endif /* AVCODEC_VP9DATA_H */

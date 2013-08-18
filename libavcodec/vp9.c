@@ -29,14 +29,6 @@
 #include "vp9data.h"
 #include "vp9dsp.h"
 
-enum FilterMode {
-    FILTER_8TAP_SMOOTH,
-    FILTER_8TAP_REGULAR,
-    FILTER_8TAP_SHARP,
-    FILTER_BILINEAR,
-    FILTER_SWITCHABLE,
-};
-
 enum CompPredMode {
     PRED_SINGLEREF,
     PRED_COMPREF,
@@ -52,7 +44,13 @@ enum BlockLevel {
     BL_8X8,
 };
 
+struct mv_storage {
+    int16_t mv[2][2];
+    int8_t ref[2];
+};
+
 typedef struct VP9Context {
+    int nr;
     VP9DSPContext dsp;
     VideoDSPContext vdsp;
     GetBitContext gb;
@@ -61,7 +59,8 @@ typedef struct VP9Context {
     // bitstream header
     unsigned profile:2;
     unsigned keyframe:1;
-    unsigned invisible:1;
+    unsigned invisible:1, last_invisible:1;
+    unsigned use_last_frame_mvs:1;
     unsigned errorres:1;
     unsigned colorspace:3;
     unsigned fullrange:1;
@@ -145,7 +144,7 @@ typedef struct VP9Context {
             unsigned sign[2];
             unsigned classes[11];
             unsigned class0[2];
-            unsigned bits[11];
+            unsigned bits[10][2];
             unsigned class0_fp[2][4];
             unsigned fp[4];
             unsigned class0_hp[2];
@@ -157,13 +156,27 @@ typedef struct VP9Context {
     } counts;
     enum TxfmMode txfmmode:3;
     enum CompPredMode comppredmode:2;
+
+    // cpntextual (left/above) cache
     uint8_t left_partition_ctx[8], *above_partition_ctx;
-    uint8_t left_skip_ctx[8], *above_skip_ctx;
-    uint8_t left_txfm_ctx[8], *above_txfm_ctx;
     uint8_t left_mode_ctx[16], *above_mode_ctx;
+    // FIXME maybe merge some of the below in a flags field?
     uint8_t left_y_nnz_ctx[16], *above_y_nnz_ctx;
     uint8_t left_uv_nnz_ctx[2][8], *above_uv_nnz_ctx[2];
+    uint8_t left_skip_ctx[8], *above_skip_ctx; // 1bit
+    uint8_t left_txfm_ctx[8], *above_txfm_ctx; // 2bit
+    uint8_t left_segpred_ctx[8], *above_segpred_ctx; // 1bit
+    uint8_t left_intra_ctx[8], *above_intra_ctx; // 1bit
+    uint8_t left_comp_ctx[8], *above_comp_ctx; // 1bit
+    uint8_t left_ref_ctx[8], *above_ref_ctx; // 2bit
+    uint8_t left_filter_ctx[8], *above_filter_ctx;
+    int16_t left_mv_ctx[16][2], (*above_mv_ctx)[2];
+
+    // whole-frame cache
     uint8_t *intra_pred_data[3];
+    uint8_t *segmentation_map;
+    struct mv_storage *mv[2];
+
     DECLARE_ALIGNED(16, int16_t, block)[4096];
     DECLARE_ALIGNED(16, int16_t, uvblock)[2][1024];
 } VP9Context;
@@ -182,7 +195,7 @@ static int update_size(AVCodecContext *ctx, int w, int h)
     s->cols     = (w + 7) >> 3;
     s->rows     = (h + 7) >> 3;
     av_free(s->above_partition_ctx);
-    s->above_partition_ctx = av_malloc(s->sb_cols * 200);
+    s->above_partition_ctx = av_malloc(s->sb_cols * 336);
     s->above_skip_ctx = s->above_partition_ctx + s->sb_cols * 8;
     s->above_txfm_ctx = s->above_skip_ctx + s->sb_cols * 8;
     s->above_mode_ctx = s->above_txfm_ctx + s->sb_cols * 8;
@@ -192,6 +205,15 @@ static int update_size(AVCodecContext *ctx, int w, int h)
     s->intra_pred_data[0] = s->above_uv_nnz_ctx[1] + s->sb_cols * 8;
     s->intra_pred_data[1] = s->intra_pred_data[0] + s->sb_cols * 64;
     s->intra_pred_data[2] = s->intra_pred_data[1] + s->sb_cols * 32;
+    s->above_segpred_ctx = s->intra_pred_data[2] + s->sb_cols * 32;
+    s->above_intra_ctx = s->above_segpred_ctx + s->sb_cols * 8;
+    s->above_comp_ctx = s->above_intra_ctx + s->sb_cols * 8;
+    s->above_ref_ctx = s->above_comp_ctx + s->sb_cols * 8;
+    s->above_filter_ctx = s->above_ref_ctx + s->sb_cols * 8;
+    s->above_mv_ctx = (void *) (s->above_filter_ctx + s->sb_cols * 8);
+    s->segmentation_map = av_malloc(s->sb_cols * s->sb_rows * 64);
+    s->mv[0] = av_malloc(sizeof(*s->mv[0]) * s->sb_cols * s->sb_rows * 64);
+    s->mv[1] = av_malloc(sizeof(*s->mv[1]) * s->sb_cols * s->sb_rows * 64);
 
     return 0;
 }
@@ -272,8 +294,11 @@ static int decode_frame_header(AVCodecContext *ctx,
         return -1;
     }
     s->keyframe  = !get_bits1(&s->gb);
+    s->last_invisible = s->invisible;
     s->invisible = !get_bits1(&s->gb);
     s->errorres  = get_bits1(&s->gb);
+    // FIXME disable this upon resolution change
+    s->use_last_frame_mvs = !s->errorres && !s->last_invisible;
     if (s->keyframe) {
         if (get_bits_long(&s->gb, 24) != VP9_SYNCCODE) // synccode
             return AVERROR_INVALIDDATA;
@@ -492,8 +517,11 @@ static int decode_frame_header(AVCodecContext *ctx,
     if (vp56_rac_get_prob_branchy(&s->c, 128)) // marker bit
         return AVERROR_INVALIDDATA;
 
-    // FIXME for keyframes we don't need to zero all of this - most is unused
-    memset(&s->counts, 0, sizeof(s->counts));
+    if (s->keyframe || s->intraonly) {
+        memset(s->counts.coef, 0, sizeof(s->counts.coef) + sizeof(s->counts.eob));
+    } else {
+        memset(&s->counts, 0, sizeof(s->counts));
+    }
     // FIXME is it faster to not copy here, but do it down in the fw updates
     // as explicit copies if the fw update is missing (and skip the copy upon
     // fw update)?
@@ -616,19 +644,11 @@ static int decode_frame_header(AVCodecContext *ctx,
                         update_prob(&s->c, s->prob.p.comp_ref[i]);
         }
 
-        // FIXME the order of y/uv modes is different in libvpx versus here,
-        // so I think this will update the prob tables in the wrong order
         for (i = 0; i < 4; i++)
             for (j = 0; j < 9; j++)
                 if (vp56_rac_get_prob_branchy(&s->c, 252))
                     s->prob.p.y_mode[i][j] =
                         update_prob(&s->c, s->prob.p.y_mode[i][j]);
-
-        for (i = 0; i < 10; i++)
-            for (j = 0; j < 9; j++)
-                if (vp56_rac_get_prob_branchy(&s->c, 252))
-                    s->prob.p.uv_mode[i][j] =
-                        update_prob(&s->c, s->prob.p.uv_mode[i][j]);
 
         for (i = 0; i < 4; i++)
             for (j = 0; j < 4; j++)
@@ -690,7 +710,9 @@ static int decode_frame_header(AVCodecContext *ctx,
 }
 
 typedef struct {
-    int seg_id, mode[4], uvmode, skip;
+    unsigned seg_id:3, intra:1, comp:1, ref[2], mode[4], uvmode, skip:1;
+    enum FilterMode filter;
+    int16_t mv[4 /* b_idx */][2 /* ref */][2 /* h/v */];
     enum BlockLevel bl;
     enum BlockPartition bp;
     enum TxfmMode tx, uvtx;
@@ -710,6 +732,177 @@ static const uint8_t bwh_tab[5][4][2] = {
     { { 1, 1 }, { 1, 1 }, { 1, 1 }, { 1, 1 } },
 };
 
+static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
+                         int16_t *pmv, int ref, int idx)
+{
+    static const uint8_t mv_ref_blk_off[4][4][8][2] = {
+        {
+            { {  3, -1 }, { -1,  3 }, {  4, -1 }, { -1,  4 },
+              { -1, -1 }, {  0, -1 }, { -1,  0 }, {  6, -1 } },
+            { {  0, -1 }, { -1,  0 }, {  4, -1 }, { -1,  2 },
+              { -1, -1 }, {  0, -3 }, { -3,  0 }, {  2, -1 } },
+            { { -1,  0 }, {  0, -1 }, { -1,  4 }, {  2, -1 },
+              { -1, -1 }, { -3,  0 }, {  0, -3 }, { -1,  2 } },
+        }, {
+            { {  1, -1 }, { -1,  1 }, {  2, -1 }, { -1,  2 },
+              { -1, -1 }, {  0, -3 }, { -3,  0 }, { -3, -3 } },
+            { {  0, -1 }, { -1,  0 }, {  2, -1 }, { -1, -1 },
+              { -1,  1 }, {  0, -3 }, { -3,  0 }, { -3, -3 } },
+            { { -1,  0 }, {  0, -1 }, { -1,  2 }, { -1, -1 },
+              {  1, -1 }, { -3,  0 }, {  0, -3 }, { -3, -3 } },
+        }, {
+            { {  0, -1 }, { -1,  0 }, {  1, -1 }, { -1,  1 },
+              { -1, -1 }, {  0, -3 }, { -3,  0 }, { -3, -3 } },
+            { {  0, -1 }, { -1,  0 }, {  1, -1 }, { -1, -1 },
+              {  0, -2 }, { -2,  0 }, { -2, -1 }, { -1, -2 } },
+            { { -1,  0 }, {  0, -1 }, { -1,  1 }, { -1, -1 },
+              { -2,  0 }, {  0, -2 }, { -1, -2 }, { -2, -1 } },
+        }, {
+            { {  0, -1 }, { -1,  0 }, { -1, -1 }, {  0, -2 },
+              { -2,  0 }, { -1, -2 }, { -2, -1 }, { -2, -2 } },
+            { {  0, -1 }, { -1,  0 }, { -1, -1 }, {  0, -2 },
+              { -2,  0 }, { -1, -2 }, { -2, -1 }, { -2, -2 } },
+            { {  0, -1 }, { -1,  0 }, { -1, -1 }, {  0, -2 },
+              { -2,  0 }, { -1, -2 }, { -2, -1 }, { -2, -2 } },
+            { {  0, -1 }, { -1,  0 }, { -1, -1 }, {  0, -2 },
+              { -2,  0 }, { -1, -2 }, { -2, -1 }, { -2, -2 } },
+        }
+    };
+    const uint8_t (*p)[2] = mv_ref_blk_off[b->bl][b->bp];
+#define INVALID_MV 0x80008000U
+    uint32_t mem = INVALID_MV;
+    int i;
+
+#define RETURN_MV(mv) \
+    do { \
+        uint32_t m = AV_RN32(mv); \
+        if (m != INVALID_MV) { \
+            if (!idx) { \
+                AV_WN32(pmv, m); \
+                return; \
+            } else if (mem == INVALID_MV) { \
+                mem = m; \
+            } else if (m != mem) { \
+                AV_WN32(pmv, m); \
+                return; \
+            } \
+        } \
+    } while (0)
+
+    // previously coded MVs in this neighbourhood, using same reference frame
+    for (i = 0; i < 8; i++) {
+        int c = p[i][0] + col, r = p[i][1] + row;
+
+        if (c >= s->tiling.tile_col_start && c < s->cols && r >= 0 && r < s->rows) {
+            struct mv_storage *mv = &s->mv[0][r * s->sb_cols * 8 + c];
+
+            if (mv->ref[0] == ref) {
+                RETURN_MV(mv->mv[0]);
+            } else if (mv->ref[1] == ref) {
+                RETURN_MV(mv->mv[1]);
+            }
+        }
+    }
+
+    // MV at this position in previous frame, using same reference frame
+    if (s->use_last_frame_mvs) {
+        struct mv_storage *mv = &s->mv[1][row * s->sb_cols * 8 + col];
+
+        if (mv->ref[0] == ref) {
+            RETURN_MV(mv->mv[0]);
+        } else if (mv->ref[1] == ref) {
+            RETURN_MV(mv->mv[1]);
+        }
+    }
+
+#define RETURN_SCALE_MV(mv, scale) \
+    do { \
+        if (scale) { \
+            int16_t mv_temp[2] = { -mv[0], -mv[1] }; \
+            RETURN_MV(mv_temp); \
+        } else { \
+            RETURN_MV(mv); \
+        } \
+    } while (0)
+
+    // previously coded MVs in this neighbourhood, using different reference frame
+    for (i = 0; i < 8; i++) {
+        int c = p[i][0] + col, r = p[i][1] + row;
+
+        if (c >= s->tiling.tile_col_start && c < s->cols && r >= 0 && r < s->rows) {
+            struct mv_storage *mv = &s->mv[0][r * s->sb_cols * 8 + c];
+
+            if (mv->ref[0] != ref && mv->ref[0] >= 0) {
+                RETURN_SCALE_MV(mv->mv[0], s->signbias[mv->ref[0]] != s->signbias[ref]);
+            }
+            if (mv->ref[1] != ref && mv->ref[1] >= 0) {
+                RETURN_SCALE_MV(mv->mv[1], s->signbias[mv->ref[0]] != s->signbias[ref]);
+            }
+        }
+    }
+
+    // MV at this position in previous frame, using different reference frame
+    if (s->use_last_frame_mvs) {
+        struct mv_storage *mv = &s->mv[1][row * s->sb_cols * 8 + col];
+
+        if (mv->ref[0] != ref && mv->ref[0]) {
+            RETURN_SCALE_MV(mv->mv[0], s->signbias[mv->ref[0]] != s->signbias[ref]);
+        }
+        if (mv->ref[1] != ref && mv->ref[1]) {
+            RETURN_SCALE_MV(mv->mv[1], s->signbias[mv->ref[0]] != s->signbias[ref]);
+        }
+    }
+#undef INVALID_MV
+#undef RETURN_MV
+#undef RETURN_SCALE_MV
+}
+
+static av_always_inline int read_mv_component(VP9Context *s, int idx, int hp)
+{
+    int bit, sign = vp56_rac_get_prob(&s->c, s->prob.p.mv_comp[idx].sign);
+    int n, c = vp8_rac_get_tree(&s->c, vp9_mv_class_tree,
+                                s->prob.p.mv_comp[idx].classes);
+
+    s->counts.mv_comp[idx].sign[sign]++;
+    s->counts.mv_comp[idx].classes[c]++;
+    if (c) {
+        int m;
+
+        for (n = 0, m = 0; m < c; m++) {
+            bit = vp56_rac_get_prob(&s->c, s->prob.p.mv_comp[idx].bits[m]);
+            n |= bit << m;
+            s->counts.mv_comp[idx].bits[m][bit]++;
+        }
+        n <<= 3;
+        bit = vp8_rac_get_tree(&s->c, vp9_mv_fp_tree, s->prob.p.mv_comp[idx].fp);
+        n |= bit << 1;
+        s->counts.mv_comp[idx].fp[bit]++;
+        if (hp) {
+            bit = vp56_rac_get_prob(&s->c, s->prob.p.mv_comp[idx].hp);
+            s->counts.mv_comp[idx].hp[bit]++;
+            n |= bit;
+        } else {
+            n |= 1;
+        }
+    } else {
+        n = vp56_rac_get_prob(&s->c, s->prob.p.mv_comp[idx].class0);
+        s->counts.mv_comp[idx].class0[n]++;
+        bit = vp8_rac_get_tree(&s->c, vp9_mv_fp_tree,
+                               s->prob.p.mv_comp[idx].class0_fp[n]);
+        s->counts.mv_comp[idx].class0_fp[n][bit]++;
+        n = (n << 3) | (bit << 1);
+        if (hp) {
+            bit = vp56_rac_get_prob(&s->c, s->prob.p.mv_comp[idx].class0_hp);
+            s->counts.mv_comp[idx].class0_hp[bit]++;
+            n |= bit;
+        } else {
+            n |= 1;
+        }
+    }
+
+    return sign ? -(n + 1) : (n + 1);
+}
+
 static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
 {
     static const uint8_t left_ctx[4][4] = {
@@ -726,69 +919,120 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
     };
     VP9Context *s = ctx->priv_data;
     enum TxfmMode max_tx = max_tx_for_bl_bp[b->bl][b->bp];
+    int w4 = FFMIN(s->cols - col, bwh_tab[b->bl + 1][b->bp][0]);
+    int h4 = FFMIN(s->rows - row, bwh_tab[b->bl + 1][b->bp][1]), y;
+    int have_a = row > 0, have_l = col > s->tiling.tile_col_start, row7 = row & 7;
+
+    if (!s->segmentation.enabled) {
+        b->seg_id = 0;
+    } else if (s->keyframe || s->intraonly) {
+        b->seg_id = s->segmentation.update_map ?
+            vp8_rac_get_tree(&s->c, vp9_segmentation_tree, s->prob.seg) : 0;
+    } else if (!s->segmentation.update_map ||
+               (s->segmentation.temporal && // FIXME read contextualized seg pred prob
+                vp56_rac_get_prob_branchy(&s->c,
+                    s->prob.segpred[s->above_segpred_ctx[col] +
+                                    s->left_segpred_ctx[row7]]))) {
+        int pred = 8, x;
+
+        for (y = 0; y < h4; y++)
+            for (x = 0; x < w4; x++)
+                pred = FFMIN(pred, s->segmentation_map[(y + row) * 8 * s->sb_cols + x + col]);
+        b->seg_id = pred;
+
+        memset(&s->above_segpred_ctx[col], 1, w4);
+        memset(&s->left_segpred_ctx[row7], 1, h4);
+    } else {
+        b->seg_id = vp8_rac_get_tree(&s->c, vp9_segmentation_tree,
+                                     s->prob.seg);
+
+        memset(&s->above_segpred_ctx[col], 0, w4);
+        memset(&s->left_segpred_ctx[row7], 0, h4);
+    }
+    if ((s->segmentation.enabled && s->segmentation.update_map) || s->keyframe) {
+        for (y = 0; y < h4; y++)
+            memset(&s->segmentation_map[(y + row) * 8 * s->sb_cols + col],
+                   b->seg_id, w4);
+    }
+
+    b->skip = s->segmentation.enabled &&
+        s->segmentation.feat[b->seg_id].skip_enabled;
+    if (!b->skip) {
+        int c = s->left_skip_ctx[row7] + s->above_skip_ctx[col];
+        b->skip = vp56_rac_get_prob(&s->c, s->prob.p.skip[c]);
+        s->counts.skip[c][b->skip]++;
+    }
 
     if (s->keyframe || s->intraonly) {
-        uint8_t *a, *l;
+        b->intra = 1;
+    } else if (s->segmentation.feat[b->seg_id].ref_enabled) {
+        b->intra = !s->segmentation.feat[b->seg_id].ref_val;
+    } else {
+        int c, bit;
 
-        b->seg_id = s->segmentation.enabled && s->segmentation.update_map ?
-            vp8_rac_get_tree(&s->c, vp9_segmentation_tree, s->prob.seg) : 0;
-        b->skip = s->segmentation.enabled &&
-            s->segmentation.feat[b->seg_id].skip_enabled;
-        if (!b->skip) {
-            int c = s->left_skip_ctx[row & 7] + s->above_skip_ctx[col];
-            b->skip = vp56_rac_get_prob(&s->c, s->prob.p.skip[c]);
-            s->counts.skip[c][b->skip]++;
-        }
-        // FIXME share this code with inter coding
-        if (s->txfmmode == TX_SWITCHABLE) {
-            int c;
-            if (row > 0) {
-                if (col > s->tiling.tile_col_start) {
-                    c = (s->above_skip_ctx[col] ? max_tx :
-                         s->above_txfm_ctx[col]) +
-                        (s->left_skip_ctx[row & 7] ? max_tx :
-                         s->left_txfm_ctx[row & 7]) > max_tx;
-                } else {
-                    c = s->above_skip_ctx[col] ? 1 :
-                        (s->above_txfm_ctx[col] * 2 > max_tx);
-                }
-            } else {
-                if (col > s->tiling.tile_col_start) {
-                    c = s->left_skip_ctx[row & 7] ? 1 :
-                        (s->left_txfm_ctx[row & 7] * 2 > max_tx);
-                } else {
-                    c = 1;
-                }
-            }
-            switch (max_tx) {
-            case TX_32X32:
-                b->tx = vp56_rac_get_prob(&s->c, s->prob.p.tx32p[c][0]);
-                if (b->tx) {
-                    b->tx += vp56_rac_get_prob(&s->c, s->prob.p.tx32p[c][1]);
-                    if (b->tx == 2)
-                        b->tx += vp56_rac_get_prob(&s->c, s->prob.p.tx32p[c][2]);
-                }
-                s->counts.tx32p[c][b->tx]++;
-                break;
-            case TX_16X16:
-                b->tx = vp56_rac_get_prob(&s->c, s->prob.p.tx16p[c][0]);
-                if (b->tx)
-                    b->tx += vp56_rac_get_prob(&s->c, s->prob.p.tx16p[c][1]);
-                s->counts.tx16p[c][b->tx]++;
-                break;
-            case TX_8X8:
-                b->tx = vp56_rac_get_prob(&s->c, s->prob.p.tx8p[c]);
-                s->counts.tx8p[c][b->tx]++;
-                break;
-            case TX_4X4:
-                b->tx = TX_4X4;
-                break;
-            }
+        if (have_a && have_l) {
+            c = s->above_intra_ctx[col] + s->left_intra_ctx[row7];
+            c += (c == 2);
         } else {
-            b->tx = FFMIN(max_tx, s->txfmmode);
+            c = have_a ? 2 * s->above_intra_ctx[col] :
+                have_l ? 2 * s->left_intra_ctx[row7] : 0;
         }
-        a = &s->above_mode_ctx[col * 2];
-        l = &s->left_mode_ctx[(row & 7) << 1];
+        bit = vp56_rac_get_prob(&s->c, s->prob.p.intra[c]);
+        s->counts.intra[c][bit]++;
+        b->intra = !bit;
+    }
+
+    if ((b->intra || !b->skip) && s->txfmmode == TX_SWITCHABLE) {
+        int c;
+        if (have_a) {
+            if (have_l) {
+                c = (s->above_skip_ctx[col] ? max_tx :
+                     s->above_txfm_ctx[col]) +
+                    (s->left_skip_ctx[row7] ? max_tx :
+                     s->left_txfm_ctx[row7]) > max_tx;
+            } else {
+                c = s->above_skip_ctx[col] ? 1 :
+                    (s->above_txfm_ctx[col] * 2 > max_tx);
+            }
+        } else if (have_l) {
+            c = s->left_skip_ctx[row7] ? 1 :
+                (s->left_txfm_ctx[row7] * 2 > max_tx);
+        } else {
+            c = 1;
+        }
+        switch (max_tx) {
+        case TX_32X32:
+            b->tx = vp56_rac_get_prob(&s->c, s->prob.p.tx32p[c][0]);
+            if (b->tx) {
+                b->tx += vp56_rac_get_prob(&s->c, s->prob.p.tx32p[c][1]);
+                if (b->tx == 2)
+                    b->tx += vp56_rac_get_prob(&s->c, s->prob.p.tx32p[c][2]);
+            }
+            s->counts.tx32p[c][b->tx]++;
+            break;
+        case TX_16X16:
+            b->tx = vp56_rac_get_prob(&s->c, s->prob.p.tx16p[c][0]);
+            if (b->tx)
+                b->tx += vp56_rac_get_prob(&s->c, s->prob.p.tx16p[c][1]);
+            s->counts.tx16p[c][b->tx]++;
+            break;
+        case TX_8X8:
+            b->tx = vp56_rac_get_prob(&s->c, s->prob.p.tx8p[c]);
+            s->counts.tx8p[c][b->tx]++;
+            break;
+        case TX_4X4:
+            b->tx = TX_4X4;
+            break;
+        }
+    } else {
+        b->tx = FFMIN(max_tx, s->txfmmode);
+    }
+
+    if (s->keyframe || s->intraonly) {
+        uint8_t *a = &s->above_mode_ctx[col * 2];
+        uint8_t *l = &s->left_mode_ctx[(row7) << 1];
+
+        b->comp = 0;
         if (b->bl == BL_8X8 && b->bp != PARTITION_NONE) {
             // FIXME the memory storage intermediates here aren't really
             // necessary, they're just there to make the code slightly
@@ -826,21 +1070,474 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
         }
         b->uvmode = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                      vp9_default_kf_uvmode_probs[b->mode[3]]);
+    } else if (b->intra) {
+        b->comp = 0;
+        if (b->bl == BL_8X8 && b->bp != PARTITION_NONE) {
+            b->mode[0] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
+                                          s->prob.p.y_mode[0]);
+            s->counts.y_mode[0][b->mode[0]]++;
+            if (b->bp != PARTITION_H) {
+                b->mode[1] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
+                                              s->prob.p.y_mode[0]);
+                s->counts.y_mode[0][b->mode[1]]++;
+            } else {
+                b->mode[1] = b->mode[0];
+            }
+            if (b->bp != PARTITION_V) {
+                b->mode[2] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
+                                              s->prob.p.y_mode[0]);
+                s->counts.y_mode[0][b->mode[2]]++;
+                if (b->bp != PARTITION_H) {
+                    b->mode[3] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
+                                                  s->prob.p.y_mode[0]);
+                    s->counts.y_mode[0][b->mode[3]]++;
+                } else {
+                    b->mode[3] = b->mode[0];
+                }
+            } else {
+                b->mode[2] = b->mode[0];
+                b->mode[3] = b->mode[1];
+            }
+        } else {
+            static const uint8_t size_group[4][4] = {
+                { 3, 3, 3 }, { 3, 2, 2 }, { 2, 1, 1 }, { 1 }
+            };
+            int sz = size_group[b->bl][b->bp];
+
+            b->mode[0] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
+                                          s->prob.p.y_mode[sz]);
+            b->mode[1] = b->mode[2] = b->mode[3] = b->mode[0];
+            s->counts.y_mode[sz][b->mode[3]]++;
+        }
+        b->uvmode = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
+                                     s->prob.p.uv_mode[b->mode[3]]);
+        s->counts.uv_mode[b->mode[3]][b->uvmode]++;
     } else {
-        // FIXME unimplemented inter coding
-        printf("Inter frames not yet working\n");
-        return -1;
+        static const uint8_t inter_mode_ctx_lut[14][14] = {
+            { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5, 5 },
+            { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5, 5 },
+            { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5, 5 },
+            { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5, 5 },
+            { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5, 5 },
+            { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5, 5 },
+            { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5, 5 },
+            { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5, 5 },
+            { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5, 5 },
+            { 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5, 5 },
+            { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 2, 2, 1, 3 },
+            { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 2, 2, 1, 3 },
+            { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 1, 1, 0, 3 },
+            { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 3, 3, 3, 4 },
+        };
+
+        if (s->segmentation.feat[b->seg_id].ref_enabled) {
+            assert(s->segmentation.feat[b->seg_id].ref_val != 0);
+            b->comp = 0;
+            b->ref[0] = s->segmentation.feat[b->seg_id].ref_val - 1;
+        } else {
+            // read comp_pred flag
+            if (s->comppredmode != PRED_SWITCHABLE) {
+                b->comp = s->comppredmode == PRED_COMPREF;
+            } else {
+                int c;
+
+                // FIXME add intra as ref=0xff (or -1) to make these easier?
+                if (have_a) {
+                    if (have_l) {
+                        if (s->above_comp_ctx[col] && s->left_comp_ctx[row7]) {
+                            c = 4;
+                        } else if (s->above_comp_ctx[col]) {
+                            c = 2 + (s->left_intra_ctx[row7] ||
+                                     s->left_ref_ctx[row7] == s->fixcompref);
+                        } else if (s->left_comp_ctx[row7]) {
+                            c = 2 + (s->above_intra_ctx[col] ||
+                                     s->above_ref_ctx[col] == s->fixcompref);
+                        } else {
+                            c = (!s->above_intra_ctx[col] &&
+                                 s->above_ref_ctx[col] == s->fixcompref) ^
+                            (!s->left_intra_ctx[row7] &&
+                             s->left_ref_ctx[row & 7] == s->fixcompref);
+                        }
+                    } else {
+                        c = s->above_comp_ctx[col] ? 3 :
+                        (!s->above_intra_ctx[col] && s->above_ref_ctx[col] == s->fixcompref);
+                    }
+                } else if (have_l) {
+                    c = s->left_comp_ctx[row7] ? 3 :
+                    (!s->left_intra_ctx[row7] && s->left_ref_ctx[row7] == s->fixcompref);
+                } else {
+                    c = 1;
+                }
+                b->comp = vp56_rac_get_prob(&s->c, s->prob.p.comp[c]);
+                s->counts.comp[c][b->comp]++;
+            }
+
+            // read actual references
+            // FIXME probably cache a few variables here to prevent repetitive
+            // memory accesses below
+            if (b->comp) /* two references */ {
+                int fix_idx = s->signbias[s->fixcompref], var_idx = !fix_idx, c, bit;
+
+                b->ref[fix_idx] = s->fixcompref;
+                // FIXME can this codeblob be replaced by some sort of LUT?
+                if (have_a) {
+                    if (have_l) {
+                        if (s->above_intra_ctx[col]) {
+                            if (s->left_intra_ctx[row7]) {
+                                c = 2;
+                            } else {
+                                c = 1 + 2 * (s->left_ref_ctx[row7] != s->varcompref[1]);
+                            }
+                        } else if (s->left_intra_ctx[row7]) {
+                            c = 1 + 2 * (s->above_ref_ctx[col] != s->varcompref[1]);
+                        } else {
+                            int refl = s->left_ref_ctx[row7], refa = s->above_ref_ctx[col];
+
+                            if (refl == refa && refa == s->varcompref[1]) {
+                                c = 0;
+                            } else if (!s->left_comp_ctx[row7] && !s->above_comp_ctx[col]) {
+                                if ((refa == s->fixcompref && refl == s->varcompref[0]) ||
+                                    (refl == s->fixcompref && refa == s->varcompref[0])) {
+                                    c = 4;
+                                } else {
+                                    c = (refa == refl) ? 3 : 1;
+                                }
+                            } else if (!s->left_comp_ctx[row7]) {
+                                if (refa == s->varcompref[1] && refl != s->varcompref[1]) {
+                                    c = 1;
+                                } else {
+                                    c = (refl == s->varcompref[1] &&
+                                         refa != s->varcompref[1]) ? 2 : 4;
+                                }
+                            } else if (!s->above_comp_ctx[col]) {
+                                if (refl == s->varcompref[1] && refa != s->varcompref[1]) {
+                                    c = 1;
+                                } else {
+                                    c = (refa == s->varcompref[1] &&
+                                         refl != s->varcompref[1]) ? 2 : 4;
+                                }
+                            } else {
+                                c = (refl == refa) ? 4 : 2;
+                            }
+                        }
+                    } else {
+                        if (s->above_intra_ctx[col]) {
+                            c = 2;
+                        } else if (s->above_comp_ctx[col]) {
+                            c = 4 * (s->above_ref_ctx[col] != s->varcompref[1]);
+                        } else {
+                            c = 3 * (s->above_ref_ctx[col] != s->varcompref[1]);
+                        }
+                    }
+                } else if (have_l) {
+                    if (s->left_intra_ctx[row7]) {
+                        c = 2;
+                    } else if (s->left_comp_ctx[row7]) {
+                        c = 4 * (s->left_ref_ctx[row7] != s->varcompref[1]);
+                    } else {
+                        c = 3 * (s->left_ref_ctx[row7] != s->varcompref[1]);
+                    }
+                } else {
+                    c = 2;
+                }
+                bit = vp56_rac_get_prob(&s->c, s->prob.p.comp_ref[c]);
+                b->ref[var_idx] = s->varcompref[bit];
+                s->counts.comp_ref[c][bit]++;
+            } else /* single reference */ {
+                int bit, c;
+
+#if 0
+                // FIXME can this codeblob be replaced by some sort of LUT?
+                // ref=intra?0:ref+1, comp=comp?fixcompref+1:0
+                // x=lut[aref][acomp][lref][lcomp];
+                // then probably a separate 2d lut for the case where only a
+                // or l is available, and the fixed constant for neither a nor
+                // l, so you have c = have_a && have_l ? lut4[...] :
+                //                    have_a ? lut2[..] : have_l ? lut2[..] : X;
+                static const uint8_t lut[4][4][4][4] = {
+                    {
+                        { { a, b, c, d }, { a, b, c, d }, { a, b, c, d }, { a, b, c, d } },
+                        { { a, b, c, d }, { a, b, c, d }, { a, b, c, d }, { a, b, c, d } },
+                        { { a, b, c, d }, { a, b, c, d }, { a, b, c, d }, { a, b, c, d } },
+                        { { a, b, c, d }, { a, b, c, d }, { a, b, c, d }, { a, b, c, d } },
+                    }, {
+                        { { a, b, c, d }, { a, b, c, d }, { a, b, c, d }, { a, b, c, d } },
+                        { { a, b, c, d }, { a, b, c, d }, { a, b, c, d }, { a, b, c, d } },
+                        { { a, b, c, d }, { a, b, c, d }, { a, b, c, d }, { a, b, c, d } },
+                        { { a, b, c, d }, { a, b, c, d }, { a, b, c, d }, { a, b, c, d } },
+                    }, {
+                        { { a, b, c, d }, { a, b, c, d }, { a, b, c, d }, { a, b, c, d } },
+                        { { a, b, c, d }, { a, b, c, d }, { a, b, c, d }, { a, b, c, d } },
+                        { { a, b, c, d }, { a, b, c, d }, { a, b, c, d }, { a, b, c, d } },
+                        { { a, b, c, d }, { a, b, c, d }, { a, b, c, d }, { a, b, c, d } },
+                    }, {
+                        { { a, b, c, d }, { a, b, c, d }, { a, b, c, d }, { a, b, c, d } },
+                        { { a, b, c, d }, { a, b, c, d }, { a, b, c, d }, { a, b, c, d } },
+                        { { a, b, c, d }, { a, b, c, d }, { a, b, c, d }, { a, b, c, d } },
+                        { { a, b, c, d }, { a, b, c, d }, { a, b, c, d }, { a, b, c, d } },
+                    }
+                };
+#endif
+                if (have_a && !s->above_intra_ctx[col]) {
+                    if (have_l && !s->left_intra_ctx[row7]) {
+                        if (s->left_comp_ctx[row7]) {
+                            if (s->above_comp_ctx[col]) {
+                                c = 1 + (!s->fixcompref || !s->left_ref_ctx[row7] ||
+                                         !s->above_ref_ctx[col]);
+                            } else {
+                                c = (1 + 2 * !s->above_ref_ctx[col]) *
+                                (!s->fixcompref || !s->left_ref_ctx[row7]);
+                            }
+                        } else if (s->above_comp_ctx[col]) {
+                            c = (1 + 2 * !s->left_ref_ctx[row7]) *
+                            (!s->fixcompref || !s->above_ref_ctx[col]);
+                        } else {
+                            c = 2 * !s->left_ref_ctx[row7] + 2 * !s->above_ref_ctx[col];
+                        }
+                    } else if (s->above_intra_ctx[col]) {
+                        c = 2;
+                    } else if (s->above_comp_ctx[col]) {
+                        c = 1 + (!s->fixcompref || !s->above_ref_ctx[col]);
+                    } else {
+                        c = 4 * (!s->above_ref_ctx[col]);
+                    }
+                } else if (have_l && !s->left_intra_ctx[row7]) {
+                    if (s->left_intra_ctx[row7]) {
+                        c = 2;
+                    } else if (s->left_comp_ctx[row7]) {
+                        c = 1 + (!s->fixcompref || !s->left_ref_ctx[row7]);
+                    } else {
+                        c = 4 * (!s->left_ref_ctx[row7]);
+                    }
+                } else {
+                    c = 2;
+                }
+                bit = vp56_rac_get_prob(&s->c, s->prob.p.single_ref[c][0]);
+                s->counts.single_ref[c][0][bit]++;
+                if (!bit) {
+                    b->ref[0] = 0;
+                } else {
+                    // FIXME can this codeblob be replaced by some sort of LUT?
+                    if (have_a) {
+                        if (have_l) {
+                            if (s->left_intra_ctx[row7]) {
+                                if (s->above_intra_ctx[col]) {
+                                    c = 2;
+                                } else if (s->above_comp_ctx[col]) {
+                                    c = 1 + 2 * (s->fixcompref == 1 ||
+                                                 s->above_ref_ctx[col] == 1);
+                                } else if (!s->above_ref_ctx[col]) {
+                                    c = 3;
+                                } else {
+                                    c = 4 * (s->above_ref_ctx[col] == 1);
+                                }
+                            } else if (s->above_intra_ctx[col]) {
+                                if (s->left_intra_ctx[row7]) {
+                                    c = 2;
+                                } else if (s->left_comp_ctx[row7]) {
+                                    c = 1 + 2 * (s->fixcompref == 1 ||
+                                                 s->left_ref_ctx[row7] == 1);
+                                } else if (!s->left_ref_ctx[row7]) {
+                                    c = 3;
+                                } else {
+                                    c = 4 * (s->left_ref_ctx[row7] == 1);
+                                }
+                            } else if (s->above_comp_ctx[col]) {
+                                if (s->left_comp_ctx[row7]) {
+                                    if (s->left_ref_ctx[row7] == s->above_ref_ctx[col]) {
+                                        c = 3 * (s->fixcompref == 1 ||
+                                                 s->left_ref_ctx[row7] == 1);
+                                    } else {
+                                        c = 2;
+                                    }
+                                } else if (!s->left_ref_ctx[row7]) {
+                                    c = 1 + 2 * (s->fixcompref == 1 ||
+                                                 s->above_ref_ctx[col] == 1);
+                                } else {
+                                    c = 3 * (s->left_ref_ctx[row7] == 1) +
+                                    (s->fixcompref == 1 || s->above_ref_ctx[col] == 1);
+                                }
+                            } else if (s->left_comp_ctx[row7]) {
+                                if (!s->above_ref_ctx[col]) {
+                                    c = 1 + 2 * (s->fixcompref == 1 ||
+                                                 s->left_ref_ctx[row7] == 1);
+                                } else {
+                                    c = 3 * (s->above_ref_ctx[col] == 1) +
+                                    (s->fixcompref == 1 || s->left_ref_ctx[row7] == 1);
+                                }
+                            } else if (!s->above_ref_ctx[col]) {
+                                if (!s->left_ref_ctx[row7]) {
+                                    c = 3;
+                                } else {
+                                    c = 4 * (s->left_ref_ctx[row7] == 1);
+                                }
+                            } else if (!s->left_ref_ctx[row7]) {
+                                c = 4 * (s->above_ref_ctx[col] == 1);
+                            } else {
+                                c = 2 * (s->left_ref_ctx[row7] == 1) +
+                                2 * (s->above_ref_ctx[col] == 1);
+                            }
+                        } else {
+                            if (s->above_intra_ctx[col] ||
+                                (!s->above_comp_ctx[col] && !s->above_ref_ctx[col])) {
+                                c = 2;
+                            } else if (s->above_comp_ctx[col]) {
+                                c = 3 * (s->fixcompref == 1 || s->above_ref_ctx[col] == 1);
+                            } else {
+                                c = 4 * (s->above_ref_ctx[col] == 1);
+                            }
+                        }
+                    } else if (have_l) {
+                        if (s->left_intra_ctx[row7] ||
+                            (!s->left_comp_ctx[row7] && !s->left_ref_ctx[row7])) {
+                            c = 2;
+                        } else if (s->left_comp_ctx[row7]) {
+                            c = 3 * (s->fixcompref == 1 || s->left_ref_ctx[row7] == 1);
+                        } else {
+                            c = 4 * (s->left_ref_ctx[row7] == 1);
+                        }
+                    } else {
+                        c = 2;
+                    }
+                    bit = vp56_rac_get_prob(&s->c, s->prob.p.single_ref[c][1]);
+                    s->counts.single_ref[c][1][bit]++;
+                    b->ref[0] = 1 + bit;
+                }
+            }
+        }
+
+        if (b->bl != BL_8X8 || b->bp == PARTITION_NONE) {
+            if (s->segmentation.feat[b->seg_id].skip_enabled) {
+                b->mode[0] = b->mode[1] = b->mode[2] = b->mode[3] = ZEROMV;
+            } else {
+                int c = inter_mode_ctx_lut[s->above_mode_ctx[col]][s->left_mode_ctx[row7]];
+
+                b->mode[0] = vp8_rac_get_tree(&s->c, vp9_inter_mode_tree,
+                                              s->prob.p.mv_mode[c]);
+                b->mode[1] = b->mode[2] = b->mode[3] = b->mode[0];
+                s->counts.mv_mode[c][b->mode[0] - 10]++;
+            }
+        }
+
+        if (s->filtermode == FILTER_SWITCHABLE) {
+            int c;
+
+            if (have_a && s->above_mode_ctx[col] >= NEARESTMV) {
+                if (have_l && s->left_mode_ctx[row7] >= NEARESTMV) {
+                    c = s->above_filter_ctx[col] == s->left_filter_ctx[row7] ?
+                        s->left_filter_ctx[row7] : 3;
+                } else {
+                    c = s->above_filter_ctx[col];
+                }
+            } else if (have_l && s->left_mode_ctx[row7] >= NEARESTMV) {
+                c = s->left_filter_ctx[row7];
+            } else {
+                c = 3;
+            }
+
+            b->filter = vp8_rac_get_tree(&s->c, vp9_filter_tree,
+                                         s->prob.p.filter[c]);
+            s->counts.filter[c][b->filter]++;
+        } else {
+            b->filter = s->filtermode;
+        }
+
+        if (b->bl == BL_8X8 && b->bp == PARTITION_NONE) {
+            // sub8x8 mode/mv coding
+            // inter mode ctx = inter_mode_ctx_lut[a_mode][l_mode];
+            printf("Inter sub8x8 mode/mv coding not yet done\n");
+            return -1;
+        } else if (b->mode[0] == ZEROMV) {
+            memset(b->mv, 0, sizeof(b->mv));
+        } else {
+            find_ref_mvs(s, b, row, col,
+                         b->mv[0][0], b->ref[0], b->mode[0] == NEARMV);
+            if (b->comp)
+                find_ref_mvs(s, b, row, col,
+                             b->mv[0][1], b->ref[1], b->mode[0] == NEARMV);
+
+            if (b->mode[0] == NEWMV) {
+                int hp = s->highprecisionmvs && abs(b->mv[0][0][0]) < 64 &&
+                         abs(b->mv[0][0][1]) < 64;
+                enum MVJoint j = vp8_rac_get_tree(&s->c, vp9_mv_joint_tree,
+                                                  s->prob.p.mv_joint);
+
+                s->counts.mv_joint[j]++;
+                if (j >= MV_JOINT_V)
+                    b->mv[0][0][1] += read_mv_component(s, 0, hp);
+                if (j & 1)
+                    b->mv[0][0][0] += read_mv_component(s, 1, hp);
+
+                if (b->comp) {
+                    hp = s->highprecisionmvs && abs(b->mv[0][1][0]) < 64 &&
+                         abs(b->mv[0][1][1]) < 64;
+                    j = vp8_rac_get_tree(&s->c, vp9_mv_joint_tree,
+                                         s->prob.p.mv_joint);
+
+                    s->counts.mv_joint[j]++;
+                    if (j >= MV_JOINT_V)
+                        b->mv[0][1][1] += read_mv_component(s, 0, hp);
+                    if (j & 1)
+                        b->mv[0][1][0] += read_mv_component(s, 1, hp);
+                }
+            }
+        }
     }
 
     // FIXME this can probably be optimized
-    memset(&s->above_skip_ctx[col], b->skip, bwh_tab[b->bl + 1][b->bp][0]);
-    memset(&s->left_skip_ctx[row & 7], b->skip, bwh_tab[b->bl + 1][b->bp][1]);
-    memset(&s->above_txfm_ctx[col], b->tx, bwh_tab[b->bl + 1][b->bp][0]);
-    memset(&s->left_txfm_ctx[row & 7], b->tx, bwh_tab[b->bl + 1][b->bp][1]);
-    memset(&s->above_partition_ctx[col], above_ctx[b->bl][b->bp],
-           bwh_tab[b->bl + 1][b->bp][0]);
-    memset(&s->left_partition_ctx[row & 7], left_ctx[b->bl][b->bp],
-           bwh_tab[b->bl + 1][b->bp][1]);
+    memset(&s->above_skip_ctx[col], b->skip, w4);
+    memset(&s->left_skip_ctx[row7], b->skip, h4);
+    memset(&s->above_txfm_ctx[col], b->tx, w4);
+    memset(&s->left_txfm_ctx[row7], b->tx, h4);
+    memset(&s->above_partition_ctx[col], above_ctx[b->bl][b->bp], w4);
+    memset(&s->left_partition_ctx[row7], left_ctx[b->bl][b->bp], h4);
+    if (!s->keyframe && !s->intraonly) {
+        memset(&s->above_intra_ctx[col], b->intra, w4);
+        memset(&s->left_intra_ctx[row7], b->intra, h4);
+        memset(&s->above_comp_ctx[col], b->comp, w4);
+        memset(&s->left_comp_ctx[row7], b->comp, h4);
+        memset(&s->above_comp_ctx[col], b->mode[3], w4);
+        memset(&s->left_mode_ctx[row7], b->mode[3], h4);
+        if (s->filtermode == FILTER_SWITCHABLE && !b->intra ) {
+            memset(&s->above_filter_ctx[col], b->filter, w4);
+            memset(&s->left_filter_ctx[row7], b->filter, h4);
+            b->filter = vp9_filter_lut[b->filter];
+        }
+        // FIXME MV context for sub8x8 lists
+
+        if (!b->intra) { // FIXME write 0xff or -1 if intra, so we can use this
+                         // as a direct check in above branches
+            int vref = b->ref[b->comp ? s->signbias[s->varcompref[0]] : 0];
+
+            memset(&s->above_ref_ctx[col], vref, w4);
+            memset(&s->left_ref_ctx[row7], vref, h4);
+        }
+    }
+
+    // FIXME kinda ugly
+    for (y = 0; y < h4; y++) {
+        int x, o = (row + y) * s->sb_cols + col;
+
+        if (b->intra) {
+            for (x = 0; x < w4; x++) {
+                s->mv[0][o + x].ref[0] =
+                s->mv[0][o + x].ref[1] = -1;
+            }
+        } else if (b->comp) {
+            for (x = 0; x < w4; x++) {
+                s->mv[0][o + x].ref[0] = b->ref[0];
+                s->mv[0][o + x].ref[1] = b->ref[1];
+                AV_COPY32(s->mv[0][o + x].mv[0], b->mv[0][0]);
+                AV_COPY32(s->mv[0][o + x].mv[1], b->mv[0][1]);
+            }
+        } else {
+            for (x = 0; x < w4; x++) {
+                s->mv[0][o + x].ref[0] = b->ref[0];
+                s->mv[0][o + x].ref[1] = -1;
+                AV_COPY32(&s->mv[0][o + x].mv[0], &b->mv[0][0]);
+            }
+        }
+    }
 
     return 0;
 }
@@ -956,9 +1653,9 @@ static int decode_coeffs_b(VP56RangeCoder *c, int16_t *coef, int n_coeffs,
 static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
 {
     VP9Context *s = ctx->priv_data;
-    uint8_t (*p)[6][11] = s->prob.coef[b->tx][0 /* y */][0 /* ref */];
-    unsigned (*c)[6][3] = s->counts.coef[b->tx][0 /* y */][0 /* ref */];
-    unsigned (*e)[6][2] = s->counts.eob[b->tx][0 /* y */][0 /* ref */];
+    uint8_t (*p)[6][11] = s->prob.coef[b->tx][0 /* y */][!b->intra];
+    unsigned (*c)[6][3] = s->counts.coef[b->tx][0 /* y */][!b->intra];
+    unsigned (*e)[6][2] = s->counts.eob[b->tx][0 /* y */][!b->intra];
     // FIXME skip fully out-of-visible-area tx-blocks
     int w4 = bwh_tab[b->bl + 1][b->bp][0] << 1;
     int h4 = bwh_tab[b->bl + 1][b->bp][1] << 1;
@@ -1009,9 +1706,9 @@ static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
             memset(&a[x + 1], a[x], step1d - 1);
     }
 
-    p = s->prob.coef[b->uvtx][1 /* uv */][0 /* ref */];
-    c = s->counts.coef[b->uvtx][1 /* uv */][0 /* ref */];
-    e = s->counts.eob[b->uvtx][1 /* uv */][0 /* ref */];
+    p = s->prob.coef[b->uvtx][1 /* uv */][!b->intra];
+    c = s->counts.coef[b->uvtx][1 /* uv */][!b->intra];
+    e = s->counts.eob[b->uvtx][1 /* uv */][!b->intra];
     w4 >>= 1;
     h4 >>= 1;
     for (pl = 0; pl < 2; pl++) {
@@ -1300,8 +1997,12 @@ static int decode_b(AVCodecContext *ctx, int row, int col,
             memset(&s->left_uv_nnz_ctx[pl][row & 7], 0, h4);
         }
     }
-    // FIXME inter predict
-    intra_recon(ctx, &b, row, col, yoff, uvoff);
+    if (b.intra) {
+        intra_recon(ctx, &b, row, col, yoff, uvoff);
+    } else {
+        printf("Inter recon not yet implemented\n");
+        return -1;
+    }
 
     // pick filter level and find edges to apply filter to
     if (s->filter.level &&
@@ -1749,11 +2450,15 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
     // main tile decode loop
     memset(s->above_partition_ctx, 0, s->cols);
     memset(s->above_skip_ctx, 0, s->cols);
-    memset(s->above_mode_ctx, DC_PRED, s->cols * 2);
+    if (s->keyframe || s->intraonly) {
+        memset(s->above_mode_ctx, DC_PRED, s->cols * 2);
+    } else {
+        memset(s->above_mode_ctx, NEARESTMV, s->cols);
+    }
     memset(s->above_y_nnz_ctx, 0, s->cols * 2);
     memset(s->above_uv_nnz_ctx[0], 0, s->cols);
     memset(s->above_uv_nnz_ctx[1], 0, s->cols);
-    // FIXME clean above contexts
+    memset(s->above_segpred_ctx, 0, s->cols);
     for (tile_row = 0; tile_row < s->tiling.tile_rows; tile_row++) {
         ptrdiff_t yoff, uvoff;
         set_tile_offset(&s->tiling.tile_row_start, &s->tiling.tile_row_end,
@@ -1795,10 +2500,14 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
 
                 memset(s->left_partition_ctx, 0, 8);
                 memset(s->left_skip_ctx, 0, 8);
-                memset(s->left_mode_ctx, DC_PRED, 16);
+                if (s->keyframe || s->intraonly) {
+                    memset(s->left_mode_ctx, DC_PRED, 16);
+                } else {
+                    memset(s->left_mode_ctx, NEARESTMV, 8);
+                }
                 memset(s->left_y_nnz_ctx, 0, 16);
                 memset(s->left_uv_nnz_ctx, 0, 16);
-                // FIXME clear left context
+                memset(s->left_segpred_ctx, 0, 8);
                 for (col = s->tiling.tile_col_start;
                      col  < s->tiling.tile_col_end;
                      col += 8, yoff3 += 64, uvoff3 += 32, lflvl_ptr++) {
@@ -1927,6 +2636,7 @@ static int vp9_decode_init(AVCodecContext *ctx)
     VP9Context *s = ctx->priv_data;
     int i;
 
+    s->nr = 0;
     ctx->pix_fmt = AV_PIX_FMT_YUV420P;
     ff_vp9dsp_init(&s->dsp);
     ff_videodsp_init(&s->vdsp, 8);
@@ -1954,6 +2664,12 @@ static int vp9_decode_free(AVCodecContext *ctx)
     s->above_skip_ctx = s->above_txfm_ctx = s->above_mode_ctx = NULL;
     s->above_y_nnz_ctx = s->above_uv_nnz_ctx[0] = s->above_uv_nnz_ctx[1] = NULL;
     s->intra_pred_data[0] = s->intra_pred_data[1] = s->intra_pred_data[2] = NULL;
+    s->above_segpred_ctx = s->above_intra_ctx = s->above_comp_ctx = NULL;
+    s->above_ref_ctx = s->above_filter_ctx = NULL;
+    s->above_mv_ctx = NULL;
+    av_freep(&s->segmentation_map);
+    av_freep(&s->mv[0]);
+    av_freep(&s->mv[1]);
 
     return 0;
 }
