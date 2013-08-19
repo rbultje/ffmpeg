@@ -2117,9 +2117,9 @@ enum MVJoint {
 };
 
 static const int8_t vp9_mv_joint_tree[3][2] = {
-    { -MV_JOINT_ZERO, 1 },            // '0'
-     { -MV_JOINT_H, 2 },              // '10'
-      { -MV_JOINT_V, - MV_JOINT_HV }, // '11x'
+    { -MV_JOINT_ZERO, 1 },           // '0'
+     { -MV_JOINT_H, 2 },             // '10'
+      { -MV_JOINT_V, -MV_JOINT_HV }, // '11x'
 };
 
 static const int8_t vp9_mv_class_tree[10][2] = {
