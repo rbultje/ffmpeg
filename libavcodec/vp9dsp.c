@@ -1770,7 +1770,7 @@ static void avg##_8tap_##type##_##sz##dir##_c(uint8_t *dst, ptrdiff_t dst_stride
 }
 
 #define FILTER_BILIN(src, x, mxy, stride) \
-    ((16 * src[x] + mxy * (src[x + stride] - src[x]) + 8) >> 4)
+    (src[x] + ((mxy * (src[x + stride] - src[x]) + 8) >> 4))
 
 static av_always_inline void do_bilin_1d_c(uint8_t *dst, ptrdiff_t dst_stride,
                                            const uint8_t *src, ptrdiff_t src_stride,
