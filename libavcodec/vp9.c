@@ -45,7 +45,7 @@ enum BlockLevel {
 };
 
 struct mv_storage {
-    int16_t mv[2][2];
+    VP56mv mv[2];
     int8_t ref[2];
 };
 
@@ -176,7 +176,7 @@ typedef struct VP9Context {
     uint8_t left_comp_ctx[8], *above_comp_ctx; // 1bit
     uint8_t left_ref_ctx[8], *above_ref_ctx; // 2bit
     uint8_t left_filter_ctx[8], *above_filter_ctx;
-    int16_t left_mv_ctx[16][2], (*above_mv_ctx)[2];
+    VP56mv left_mv_ctx[16], *above_mv_ctx;
 
     // whole-frame cache
     uint8_t *intra_pred_data[3];
@@ -720,7 +720,7 @@ static int decode_frame_header(AVCodecContext *ctx,
 typedef struct {
     unsigned seg_id:3, intra:1, comp:1, ref[2], mode[4], uvmode, skip:1;
     enum FilterMode filter;
-    int16_t mv[4 /* b_idx */][2 /* ref */][2 /* h/v */];
+    VP56mv mv[4 /* b_idx */][2 /* ref */];
     enum BlockLevel bl;
     enum BlockPartition bp;
     enum TxfmMode tx, uvtx;
@@ -741,7 +741,7 @@ static const uint8_t bwh_tab[5][4][2] = {
 };
 
 static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
-                         int16_t *pmv, int ref, int idx)
+                         VP56mv *pmv, int ref, int idx)
 {
     static const uint8_t mv_ref_blk_off[4][4][8][2] = {
         {
@@ -783,15 +783,15 @@ static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
 
 #define RETURN_MV(mv) \
     do { \
-        uint32_t m = AV_RN32(mv); \
+        uint32_t m = AV_RN32(&mv); \
         if (m != INVALID_MV) { \
             if (!idx) { \
-                AV_WN32(pmv, m); \
+                AV_WN32A(pmv, m); \
                 return; \
             } else if (mem == INVALID_MV) { \
                 mem = m; \
             } else if (m != mem) { \
-                AV_WN32(pmv, m); \
+                AV_WN32A(pmv, m); \
                 return; \
             } \
         } \
@@ -826,7 +826,7 @@ static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
 #define RETURN_SCALE_MV(mv, scale) \
     do { \
         if (scale) { \
-            int16_t mv_temp[2] = { -mv[0], -mv[1] }; \
+            VP56mv mv_temp = { -mv.x, -mv.y }; \
             RETURN_MV(mv_temp); \
         } else { \
             RETURN_MV(mv); \
@@ -1459,34 +1459,34 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
             memset(b->mv, 0, sizeof(b->mv));
         } else {
             find_ref_mvs(s, b, row, col,
-                         b->mv[0][0], b->ref[0], b->mode[0] == NEARMV);
+                         &b->mv[0][0], b->ref[0], b->mode[0] == NEARMV);
             if (b->comp)
                 find_ref_mvs(s, b, row, col,
-                             b->mv[0][1], b->ref[1], b->mode[0] == NEARMV);
+                             &b->mv[0][1], b->ref[1], b->mode[0] == NEARMV);
 
             if (b->mode[0] == NEWMV) {
-                int hp = s->highprecisionmvs && abs(b->mv[0][0][0]) < 64 &&
-                         abs(b->mv[0][0][1]) < 64;
+                int hp = s->highprecisionmvs && abs(b->mv[0][0].x) < 64 &&
+                         abs(b->mv[0][0].y) < 64;
                 enum MVJoint j = vp8_rac_get_tree(&s->c, vp9_mv_joint_tree,
                                                   s->prob.p.mv_joint);
 
                 s->counts.mv_joint[j]++;
                 if (j >= MV_JOINT_V)
-                    b->mv[0][0][1] += read_mv_component(s, 0, hp);
+                    b->mv[0][0].y += read_mv_component(s, 0, hp);
                 if (j & 1)
-                    b->mv[0][0][0] += read_mv_component(s, 1, hp);
+                    b->mv[0][0].x += read_mv_component(s, 1, hp);
 
                 if (b->comp) {
-                    hp = s->highprecisionmvs && abs(b->mv[0][1][0]) < 64 &&
-                         abs(b->mv[0][1][1]) < 64;
+                    hp = s->highprecisionmvs && abs(b->mv[0][1].x) < 64 &&
+                         abs(b->mv[0][1].y) < 64;
                     j = vp8_rac_get_tree(&s->c, vp9_mv_joint_tree,
                                          s->prob.p.mv_joint);
 
                     s->counts.mv_joint[j]++;
                     if (j >= MV_JOINT_V)
-                        b->mv[0][1][1] += read_mv_component(s, 0, hp);
+                        b->mv[0][1].y += read_mv_component(s, 0, hp);
                     if (j & 1)
-                        b->mv[0][1][0] += read_mv_component(s, 1, hp);
+                        b->mv[0][1].x += read_mv_component(s, 1, hp);
                 }
             }
         }
@@ -1535,14 +1535,14 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
             for (x = 0; x < w4; x++) {
                 s->mv[0][o + x].ref[0] = b->ref[0];
                 s->mv[0][o + x].ref[1] = b->ref[1];
-                AV_COPY32(s->mv[0][o + x].mv[0], b->mv[0][0]);
-                AV_COPY32(s->mv[0][o + x].mv[1], b->mv[0][1]);
+                AV_WN32A(&s->mv[0][o + x].mv[0], AV_RN32A(&b->mv[0][0]));
+                AV_WN32A(&s->mv[0][o + x].mv[1], AV_RN32A(&b->mv[0][1]));
             }
         } else {
             for (x = 0; x < w4; x++) {
                 s->mv[0][o + x].ref[0] = b->ref[0];
                 s->mv[0][o + x].ref[1] = -1;
-                AV_COPY32(&s->mv[0][o + x].mv[0], &b->mv[0][0]);
+                AV_WN32A(&s->mv[0][o + x].mv[0], AV_RN32A(&b->mv[0][0]));
             }
         }
     }
@@ -1918,6 +1918,70 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
     }
 }
 
+typedef void (*vp9_mc_func)(uint8_t *dst, ptrdiff_t dst_stride,
+                            const uint8_t *ref, ptrdiff_t ref_stride,
+                            int h, int mx, int my);
+
+static av_always_inline void mc_luma_dir(vp9_mc_func (*mc)[2],
+                                         uint8_t *dst, ptrdiff_t dst_stride,
+                                         ptrdiff_t off,
+                                         const uint8_t *ref, ptrdiff_t ref_stride,
+                                         ptrdiff_t y, ptrdiff_t x, VP56mv *mv,
+                                         int bw, int bh, int w, int h)
+{
+    // FIXME emu ege
+    int mx = mv->x, my = mv->y;
+
+    ref += (y + (my >> 3)) * ref_stride + x + (mx >> 3);
+    mx &= 7;
+    my &= 7;
+    mc[!!mx][!!my](dst, dst_stride, ref, ref_stride, bh, mx << 1, my << 1);
+}
+
+static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
+                        ptrdiff_t yoff, ptrdiff_t uvoff)
+{
+    VP9Context *s = ctx->priv_data;
+    static uint8_t bwl_fn_tab[5][4] = {
+        { 0, 0, 1 }, { 1, 1, 2 }, { 2, 2, 3 }, { 3, 3, 4, 4 }, { 4, 4, 4, 4 }
+    };
+
+    if (b->bl == BL_8X8 && b->bp != PARTITION_NONE) {
+        printf("Sub8x8 inter prediction not yet implemented\n");
+    } else {
+        AVFrame *ref1 = s->refs[s->refidx[b->ref[0]]];
+        int bw = bwl_fn_tab[b->bl][b->bp], bh = bwh_tab[b->bl][b->bp][1];
+
+        // y inter pred
+        mc_luma_dir(s->dsp.mc[bw][b->filter][0],
+                    s->f->data[0], s->f->linesize[0], yoff,
+                    ref1->data[0], ref1->linesize[0],
+                    row << 3, col << 3, &b->mv[0][0],
+                    bw, bh, s->cols << 3, s->rows << 3);
+
+        if (b->comp) {
+            AVFrame *ref2 = s->refs[s->refidx[b->ref[0]]];
+
+            mc_luma_dir(s->dsp.mc[bw][b->filter][1],
+                        s->f->data[0], s->f->linesize[0], yoff,
+                        ref2->data[0], ref2->linesize[0],
+                        row << 3, col << 3, &b->mv[0][1],
+                        bw, bh, s->cols << 3, s->rows << 3);
+        }
+    }
+
+    if (!b->skip) {
+        // y itxfm_add
+        printf("Inter itxfm add loop not yet implemented\n");
+    }
+
+    // uv inter pred
+
+    // uv itxfm add
+
+    printf("UV inter recon not yet implemented\n");
+}
+
 static av_always_inline void mask_edges(struct VP9Filter *lflvl, int is_uv,
                                         int row_and_7, int col_and_7,
                                         int w, int h, enum TxfmMode tx)
@@ -2002,8 +2066,7 @@ static int decode_b(AVCodecContext *ctx, int row, int col,
     if (b.intra) {
         intra_recon(ctx, &b, row, col, yoff, uvoff);
     } else {
-        printf("Inter recon not yet implemented\n");
-        return -1;
+        inter_recon(ctx, &b, row, col, yoff, uvoff);
     }
 
     // pick filter level and find edges to apply filter to

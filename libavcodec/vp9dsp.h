@@ -75,6 +75,21 @@ typedef struct VP9DSPContext {
     // more wide-operation SIMD use
     void (*loop_filter[3][2][2])(uint8_t *dst, ptrdiff_t stride,
                                  int mb_lim, int lim, int hev_thr);
+
+    /*
+     * dimension 1: hsize (0: 64, 1: 32, 2: 16, 3: 8, 4: 4)
+     * dimension 2: filter type (0: smooth, 1: regular, 2: sharp, 3: bilin)
+     * dimension 3: averaging type (0: put, 1: avg)
+     * dimension 4: x subpel interpolation (0: none, 1: 8tap/bilin)
+     * dimension 5: y subpel interpolation (1: none, 1: 8tap/bilin)
+     *
+     * dst/stride are aligned by hsize
+     */
+    // FIXME should filter be a function argument and that dimension be reduced
+    // to 2 (bilin vs 8tap) instead of 4?
+    void (*mc[5][4][2][2][2])(uint8_t *dst, ptrdiff_t dst_stride,
+                              const uint8_t *src, ptrdiff_t src_stride,
+                              int h, int mx, int my);
 } VP9DSPContext;
 
 void ff_vp9dsp_init(VP9DSPContext *dsp);

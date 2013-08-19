@@ -60,4 +60,12 @@ enum IntraPredMode {
     N_INTRA_PRED_MODES
 };
 
+enum FilterMode {
+    FILTER_8TAP_SMOOTH,
+    FILTER_8TAP_REGULAR,
+    FILTER_8TAP_SHARP,
+    FILTER_BILINEAR,
+    FILTER_SWITCHABLE,
+};
+
 #endif /* AVCODEC_VP9_H */

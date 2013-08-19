@@ -227,14 +227,6 @@ static const int8_t vp9_filter_tree[2][2] = {
      { -1, -2 }, // '1x'
 };
 
-enum FilterMode {
-    FILTER_8TAP_SMOOTH,
-    FILTER_8TAP_REGULAR,
-    FILTER_8TAP_SHARP,
-    FILTER_BILINEAR,
-    FILTER_SWITCHABLE,
-};
-
 static const enum FilterMode vp9_filter_lut[3] = {
     FILTER_8TAP_REGULAR,
     FILTER_8TAP_SMOOTH,
