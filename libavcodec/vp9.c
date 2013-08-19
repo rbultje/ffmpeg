@@ -49,6 +49,12 @@ struct mv_storage {
     int8_t ref[2];
 };
 
+struct VP9Filter {
+    uint8_t level[8 * 8];
+    uint8_t /* bit=col */ mask[2 /* 0=y, 1=uv */][2 /* 0=col, 1=row */]
+                              [8 /* rows */][4 /* 0=16, 1=8, 2=4, 3=inner4 */];
+};
+
 typedef struct VP9Context {
     int nr;
     VP9DSPContext dsp;
@@ -176,6 +182,7 @@ typedef struct VP9Context {
     uint8_t *intra_pred_data[3];
     uint8_t *segmentation_map;
     struct mv_storage *mv[2];
+    struct VP9Filter *lflvl;
 
     DECLARE_ALIGNED(16, int16_t, block)[4096];
     DECLARE_ALIGNED(16, int16_t, uvblock)[2][1024];
@@ -214,6 +221,7 @@ static int update_size(AVCodecContext *ctx, int w, int h)
     s->segmentation_map = av_malloc(s->sb_cols * s->sb_rows * 64);
     s->mv[0] = av_malloc(sizeof(*s->mv[0]) * s->sb_cols * s->sb_rows * 64);
     s->mv[1] = av_malloc(sizeof(*s->mv[1]) * s->sb_cols * s->sb_rows * 64);
+    s->lflvl = av_malloc(sizeof(*s->lflvl) * s->sb_cols);
 
     return 0;
 }
@@ -1910,12 +1918,6 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
     }
 }
 
-struct VP9Filter {
-    uint8_t level[8 * 8];
-    uint8_t /* bit=col */ mask[2 /* 0=y, 1=uv */][2 /* 0=col, 1=row */]
-                              [8 /* rows */][4 /* 0=16, 1=8, 2=4, 3=inner4 */];
-};
-
 static av_always_inline void mask_edges(struct VP9Filter *lflvl, int is_uv,
                                         int row_and_7, int col_and_7,
                                         int w, int h, enum TxfmMode tx)
@@ -2494,8 +2496,7 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
                  row < s->tiling.tile_row_end;
                  row += 8, yoff2 += s->f->linesize[0] * 64,
                  uvoff2 += s->f->linesize[1] * 32) {
-                // FIXME remove VLA
-                struct VP9Filter lflvl[s->sb_cols], *lflvl_ptr = lflvl;
+                struct VP9Filter *lflvl_ptr = s->lflvl;
                 ptrdiff_t yoff3 = yoff2, uvoff3 = uvoff2;
 
                 memset(s->left_partition_ctx, 0, 8);
@@ -2538,7 +2539,7 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
                 if (s->filter.level) {
                     yoff3 = yoff2;
                     uvoff3 = uvoff2;
-                    lflvl_ptr = lflvl;
+                    lflvl_ptr = s->lflvl;
                     for (col = s->tiling.tile_col_start;
                          col  < s->tiling.tile_col_end;
                          col += 8, yoff3 += 64, uvoff3 += 32, lflvl_ptr++) {
@@ -2670,6 +2671,7 @@ static int vp9_decode_free(AVCodecContext *ctx)
     av_freep(&s->segmentation_map);
     av_freep(&s->mv[0]);
     av_freep(&s->mv[1]);
+    av_freep(&s->lflvl);
 
     return 0;
 }
