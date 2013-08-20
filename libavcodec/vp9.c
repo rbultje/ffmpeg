@@ -937,7 +937,7 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
         b->seg_id = s->segmentation.update_map ?
             vp8_rac_get_tree(&s->c, vp9_segmentation_tree, s->prob.seg) : 0;
     } else if (!s->segmentation.update_map ||
-               (s->segmentation.temporal && // FIXME read contextualized seg pred prob
+               (s->segmentation.temporal &&
                 vp56_rac_get_prob_branchy(&s->c,
                     s->prob.segpred[s->above_segpred_ctx[col] +
                                     s->left_segpred_ctx[row7]]))) {
@@ -1758,8 +1758,9 @@ static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **
                                              int row, int y, enum TxfmMode tx,
                                              int p)
 {
-    // FIXME make work with tiling enabled (have_left check is wrong)
-    int have_top = row * 2 + y > 0, have_left = col * 2 + x > 0, have_right = x < w - 1;
+    int have_top = row > 0 || y > 0;
+    int have_left = col > s->tiling.tile_col_start || x > 0;
+    int have_right = x < w - 1;
     static const uint8_t mode_conv[10][2 /* have_left */][2 /* have_top */] = {
         [VERT_PRED]            = { { DC_127_PRED,          VERT_PRED },
                                    { DC_127_PRED,          VERT_PRED } },
