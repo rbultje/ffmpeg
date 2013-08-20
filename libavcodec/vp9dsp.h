@@ -65,16 +65,25 @@ typedef struct VP9DSPContext {
     /*
      * dimension 1: width of filter (0=4, 1=8, 2=16)
      * dimension 2: 0=col-edge filter (h), 1=row-edge filter (v)
-     * dimension 3: operation size (currently 0=8, 1=16)
+     *
+     * dst/stride are aligned by operation size (8 for 4wd/8wd, 16 for 16wd)
+     */
+    void (*loop_filter[3][2])(uint8_t *dst, ptrdiff_t stride,
+                              int mb_lim, int lim, int hev_thr);
+
+    /*
+     * dimension 1/2: width of filter (0=4, 1=8) for each filter half
+     * dimension 3: 0=col-edge filter (h), 1=row-edge filter (v)
      *
      * dst/stride are aligned by operation size
+     * this basically calls loop_filter[d1][d3][0](), followed by
+     * loop_filter[d2][d3][0]() on the next 8 pixels
+     * mb_lim/lim/hev_thr contain two values in the lowest two bytes of the
+     * integer.
      */
-    // FIXME add argument so we can mix filter-width types for larger operation
-    // size if the elementary operation size doesn't match (since they are just
-    // supersets of each other). That won't help C performance but will allow
-    // more wide-operation SIMD use
-    void (*loop_filter[3][2][2])(uint8_t *dst, ptrdiff_t stride,
-                                 int mb_lim, int lim, int hev_thr);
+    // FIXME perhaps a mix4 that operates on 32px (for AVX2)
+    void (*loop_filter_mix2[2][2][2])(uint8_t *dst, ptrdiff_t stride,
+                                      int mb_lim, int lim, int hev_thr);
 
     /*
      * dimension 1: hsize (0: 64, 1: 32, 2: 16, 3: 8, 4: 4)

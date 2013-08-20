@@ -1563,32 +1563,55 @@ static void loop_filter_##dir##_##wd##_##sz##_c(uint8_t *dst, \
     loop_filter(dst, stride, E, I, H, stridea, strideb, wd, sz); \
 }
 
-#define lf_fns(wd) \
-lf_fn(h, wd, 16, stride, 1) \
-lf_fn(v, wd, 16, 1, stride) \
-lf_fn(h, wd, 8, stride, 1) \
-lf_fn(v, wd, 8, 1, stride)
+#define lf_fns(wd, sz) \
+lf_fn(h, wd, sz, stride, 1) \
+lf_fn(v, wd, sz, 1, stride)
 
-lf_fns(4)
-lf_fns(8)
-lf_fn(h, 16, 16, stride, 1)
-lf_fn(v, 16, 16, 1, stride)
+lf_fns(4, 8)
+lf_fns(8, 8)
+lf_fns(16, 16)
 
 #undef lf_fn
 #undef lf_fns
 
+#define lf_mix_fn(dir, wd1, wd2, stridea) \
+static void loop_filter_##dir##_##wd1##wd2##_16_c(uint8_t *dst, \
+                                                  ptrdiff_t stride, \
+                                                  int E, int I, int H) \
+{ \
+    loop_filter_##dir##_##wd1##_8_c(dst, stride, E & 0xff, I & 0xff, H & 0xff); \
+    loop_filter_##dir##_##wd2##_8_c(dst + 8 * stridea, stride, E >> 8, I >> 8, H >> 8); \
+}
+
+#define lf_mix_fns(wd1, wd2) \
+lf_mix_fn(h, wd1, wd2, stride) \
+lf_mix_fn(v, wd1, wd2, 1)
+
+lf_mix_fns(4, 4)
+lf_mix_fns(4, 8)
+lf_mix_fns(8, 4)
+lf_mix_fns(8, 8)
+
+#undef lf_mix_fn
+#undef lf_mix_fns
+
 static void vp9dsp_loopfilter_init(VP9DSPContext *dsp)
 {
-    dsp->loop_filter[0][0][0] = loop_filter_h_4_8_c;
-    dsp->loop_filter[0][1][0] = loop_filter_v_4_8_c;
-    dsp->loop_filter[1][0][0] = loop_filter_h_8_8_c;
-    dsp->loop_filter[1][1][0] = loop_filter_v_8_8_c;
-    dsp->loop_filter[0][0][1] = loop_filter_h_4_16_c;
-    dsp->loop_filter[0][1][1] = loop_filter_v_4_16_c;
-    dsp->loop_filter[1][0][1] = loop_filter_h_8_16_c;
-    dsp->loop_filter[1][1][1] = loop_filter_v_8_16_c;
-    dsp->loop_filter[2][0][1] = loop_filter_h_16_16_c;
-    dsp->loop_filter[2][1][1] = loop_filter_v_16_16_c;
+    dsp->loop_filter[0][0] = loop_filter_h_4_8_c;
+    dsp->loop_filter[0][1] = loop_filter_v_4_8_c;
+    dsp->loop_filter[1][0] = loop_filter_h_8_8_c;
+    dsp->loop_filter[1][1] = loop_filter_v_8_8_c;
+    dsp->loop_filter[2][0] = loop_filter_h_16_16_c;
+    dsp->loop_filter[2][1] = loop_filter_v_16_16_c;
+
+    dsp->loop_filter_mix2[0][0][0] = loop_filter_h_44_16_c;
+    dsp->loop_filter_mix2[0][0][1] = loop_filter_v_44_16_c;
+    dsp->loop_filter_mix2[0][1][0] = loop_filter_h_48_16_c;
+    dsp->loop_filter_mix2[0][1][1] = loop_filter_v_48_16_c;
+    dsp->loop_filter_mix2[1][0][0] = loop_filter_h_84_16_c;
+    dsp->loop_filter_mix2[1][0][1] = loop_filter_v_84_16_c;
+    dsp->loop_filter_mix2[1][1][0] = loop_filter_h_88_16_c;
+    dsp->loop_filter_mix2[1][1][1] = loop_filter_v_88_16_c;
 }
 
 static av_always_inline void copy_c(uint8_t *dst, ptrdiff_t dst_stride,
