@@ -94,8 +94,6 @@ typedef struct VP9DSPContext {
      *
      * dst/stride are aligned by hsize
      */
-    // FIXME should filter be a function argument and that dimension be reduced
-    // to 2 (bilin vs 8tap) instead of 4?
     void (*mc[5][4][2][2][2])(uint8_t *dst, ptrdiff_t dst_stride,
                               const uint8_t *src, ptrdiff_t src_stride,
                               int h, int mx, int my);
