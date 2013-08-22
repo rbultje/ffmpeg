@@ -497,9 +497,7 @@ static int decode_frame_header(AVCodecContext *ctx,
         else
             break;
     }
-    s->tiling.log2_tile_rows = get_bits1(&s->gb);
-    if (s->tiling.log2_tile_rows)
-        s->tiling.log2_tile_rows += get_bits1(&s->gb);
+    s->tiling.log2_tile_rows = decode012(&s->gb);
     s->tiling.tile_rows = 1 << s->tiling.log2_tile_rows;
     s->tiling.tile_cols = 1 << s->tiling.log2_tile_cols;
 
