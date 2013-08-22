@@ -290,7 +290,7 @@ static int decode_frame_header(AVCodecContext *ctx,
     const uint8_t *data2;
 
     /* general header */
-    init_get_bits(&s->gb, data, size << 3);
+    init_get_bits8(&s->gb, data, size);
     if (get_bits(&s->gb, 2) != 0x2) // frame marker
         return AVERROR_INVALIDDATA;
     s->profile = get_bits1(&s->gb);
