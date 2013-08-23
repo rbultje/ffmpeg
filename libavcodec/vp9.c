@@ -1983,7 +1983,8 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
 
 static av_always_inline void mask_edges(struct VP9Filter *lflvl, int is_uv,
                                         int row_and_7, int col_and_7,
-                                        int w, int h, enum TxfmMode tx)
+                                        int w, int h, int col_end,
+                                        enum TxfmMode tx)
 {
     // FIXME for inter blocks, also skip loopfilter across edges inside a
     // predictor block if we're a skipblock (i.e. no coefficients)
@@ -1995,6 +1996,7 @@ static av_always_inline void mask_edges(struct VP9Filter *lflvl, int is_uv,
 
     if (tx == TX_4X4) {
         int t = 1 << col_and_7, m_col = (t << w) - t, y;
+        int m_col_odd = (t << (w - 1)) - t;
 
         // on 32-px edges, use the 8-px wide loopfilter; else, use 4-px wide
         if (is_uv) {
@@ -2005,7 +2007,21 @@ static av_always_inline void mask_edges(struct VP9Filter *lflvl, int is_uv,
 
                 lflvl->mask[is_uv][0][y][1] |= m_row_8;
                 lflvl->mask[is_uv][0][y][2] |= m_row_4;
-                lflvl->mask[is_uv][1][y][col_mask_id] |= m_col;
+                // for odd lines, if the odd col is not being filtered,
+                // skip odd row also:
+                // .---. <-- a
+                // |   |
+                // |___| <-- b
+                // ^   ^
+                // c   d
+                //
+                // if a/c are even row/col and b/d are odd, and d is skipped,
+                // e.g. right edge of size-66x66.webm, then skip b also (bug)
+                if ((col_end & 1) && (y & 1)) {
+                    lflvl->mask[is_uv][1][y][col_mask_id] |= m_col_odd;
+                } else {
+                    lflvl->mask[is_uv][1][y][col_mask_id] |= m_col;
+                }
             }
         } else {
             int m_row_8 = m_col & 0x11, m_row_4 = m_col - m_row_8;
@@ -2071,10 +2087,13 @@ static int decode_b(AVCodecContext *ctx, int row, int col,
     // pick filter level and find edges to apply filter to
     if (s->filter.level &&
         (lvl = s->segmentation.feat[b.seg_id].lflvl[0][0]) > 0) {
+        int x_end = FFMIN(s->cols - col, w4), y_end = FFMIN(s->rows - row, h4);
+
         for (y = 0; y < h4; y++)
             memset(&lflvl->level[((row & 7) + y) * 8 + (col & 7)], lvl, w4);
-        mask_edges(lflvl, 0, row & 7, col & 7, w4, h4, b.tx);
-        mask_edges(lflvl, 1, row & 7, col & 7, w4, h4, b.uvtx);
+        mask_edges(lflvl, 0, row & 7, col & 7, x_end, y_end, 0, b.tx);
+        mask_edges(lflvl, 1, row & 7, col & 7, x_end, y_end,
+                   s->cols & 1 && col + w4 >= s->cols ? s->cols & 7 : 0, b.uvtx);
 
         if (!s->filter.lim_lut[lvl]) {
             int sharp = s->filter.sharpness;
