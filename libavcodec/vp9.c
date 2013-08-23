@@ -2691,9 +2691,9 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
     } else {
         memset(s->above_mode_ctx, NEARESTMV, s->cols);
     }
-    memset(s->above_y_nnz_ctx, 0, s->cols * 2);
-    memset(s->above_uv_nnz_ctx[0], 0, s->cols);
-    memset(s->above_uv_nnz_ctx[1], 0, s->cols);
+    memset(s->above_y_nnz_ctx, 0, s->sb_cols * 16);
+    memset(s->above_uv_nnz_ctx[0], 0, s->sb_cols * 8);
+    memset(s->above_uv_nnz_ctx[1], 0, s->sb_cols * 8);
     memset(s->above_segpred_ctx, 0, s->cols);
     for (tile_row = 0; tile_row < s->tiling.tile_rows; tile_row++) {
         ptrdiff_t yoff, uvoff;
