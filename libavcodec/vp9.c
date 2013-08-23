@@ -1668,8 +1668,9 @@ static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
     int n, pl, x, y, step1d = 1 << b->tx, step = 1 << (b->tx * 2);
     int uvstep1d = 1 << b->uvtx, uvstep = 1 << (b->uvtx * 2), res;
     int16_t (*qmul)[2] = s->segmentation.feat[b->seg_id].qmul;
-    const int16_t **yscans = vp9_scans[b->tx];
-    const int16_t (**ynbs)[2] = vp9_scans_nb[b->tx];
+    int tx = 4 * s->lossless + b->tx;
+    const int16_t **yscans = vp9_scans[tx];
+    const int16_t (**ynbs)[2] = vp9_scans_nb[tx];
     const int16_t *uvscan = vp9_scans[b->uvtx][DCT_DCT];
     const int16_t (*uvnb)[2] = vp9_scans_nb[b->uvtx][DCT_DCT];
     uint8_t *a = &s->above_y_nnz_ctx[col * 2];
@@ -1863,6 +1864,7 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
     VP9Context *s = ctx->priv_data;
     int w4 = bwh_tab[b->bl + 1][b->bp][0] << 1, step1d = 1 << b->tx, n;
     int h4 = bwh_tab[b->bl + 1][b->bp][1] << 1, x, y, step = 1 << (b->tx * 2);
+    int tx = 4 * s->lossless + b->tx, uvtx = b->uvtx + 4 * s->lossless;
     int uvstep1d = 1 << b->uvtx, p;
     uint8_t *dst = s->f->data[0] + yoff;
 
@@ -1883,9 +1885,8 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
                                     col, x, w4, row, y, b->tx, 0);
             s->dsp.intra_pred[b->tx][mode](ptr, s->f->linesize[0], l, a);
             // FIXME eob
-            // FIXME lossless
-            s->dsp.itxfm_add[b->tx][txtp](ptr, s->f->linesize[0],
-                                          s->block + 16 * n, 16 * step);
+            s->dsp.itxfm_add[tx][txtp](ptr, s->f->linesize[0],
+                                       s->block + 16 * n, 16 * step);
         }
         dst += 4 * s->f->linesize[0] * step1d;
     }
@@ -1907,9 +1908,8 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
                                         col, x, w4, row, y, b->uvtx, p + 1);
                 s->dsp.intra_pred[b->uvtx][mode](ptr, s->f->linesize[1], l, a);
                 // FIXME eob
-                // FIXME lossless
-                s->dsp.itxfm_add[b->uvtx][DCT_DCT](ptr, s->f->linesize[1],
-                                                   s->uvblock[p] + 16 * n,
+                s->dsp.itxfm_add[uvtx][DCT_DCT](ptr, s->f->linesize[1],
+                                                s->uvblock[p] + 16 * n,
                                                    16 * step);
             }
             dst += 4 * uvstep1d * s->f->linesize[1];

@@ -11,8 +11,6 @@ vp9:
   know if these work (context-wise) without clipping to visible image size,
   though.
 - likewise, use faster variants in intra pred preparation code
-- add "pass" argument to itxfm 1d functions in vp9dsp.c, so we can remove
-  the hack in iwht4_1d
 - transpose coefficients during reading
 - split coefficient reading in 2 functions, one for 32x32, one for rest
 - skip coefficient parsing/adding/etc (and loopfilter) for out-of-frame area
@@ -22,7 +20,6 @@ vp9:
   we're not using edges in allocation, then we overwrite the start of the
   next line)
 - intra_recon alignment for a_buf
-- lossless (itxfm_add is called wrongly)
 - emu_edge in inter prediction
 - replace loopfilter masking logic with uint64_t LUTs
 - merge bl/bp arguments? basically bs=bl*3+bp

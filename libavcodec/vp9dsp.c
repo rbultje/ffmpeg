@@ -859,13 +859,13 @@ static void type_a##_##type_b##_##sz##x##sz##_add_c(uint8_t *dst, \
     int i, j; \
     int16_t tmp[sz * sz], out[sz]; \
     for (i = 0; i < sz; i++) { \
-        type_a##sz##_1d(block, 1, tmp + i * sz); \
+        type_a##sz##_1d(block, 1, tmp + i * sz, 0); \
         for (j = 0; j < sz; j++) \
             block[j] = 0; \
         block += sz; \
     } \
     for (i = 0; i < sz; i++) { \
-        type_b##sz##_1d(tmp + i, sz, out); \
+        type_b##sz##_1d(tmp + i, sz, out, 1); \
         for (j = 0; j < sz; j++) \
             dst[j * stride] = av_clip_uint8(dst[j * stride] + \
                                             (bits ? \
@@ -884,7 +884,7 @@ itxfm_wrapper(iadst, iadst, sz, bits)
 #define IN(x) in[x * stride]
 
 static av_always_inline void idct4_1d(const int16_t *in, ptrdiff_t stride,
-                                      int16_t *out)
+                                      int16_t *out, int pass)
 {
     int t0, t1, t2, t3;
 
@@ -900,7 +900,7 @@ static av_always_inline void idct4_1d(const int16_t *in, ptrdiff_t stride,
 }
 
 static av_always_inline void iadst4_1d(const int16_t *in, ptrdiff_t stride,
-                                       int16_t *out)
+                                       int16_t *out, int pass)
 {
     int t0, t1, t2, t3;
 
@@ -918,7 +918,7 @@ static av_always_inline void iadst4_1d(const int16_t *in, ptrdiff_t stride,
 itxfm_wrap(4, 4)
 
 static av_always_inline void idct8_1d(const int16_t *in, ptrdiff_t stride,
-                                      int16_t *out)
+                                      int16_t *out, int pass)
 {
     int t0, t0a, t1, t1a, t2, t2a, t3, t3a, t4, t4a, t5, t5a, t6, t6a, t7, t7a;
 
@@ -954,7 +954,7 @@ static av_always_inline void idct8_1d(const int16_t *in, ptrdiff_t stride,
 }
 
 static av_always_inline void iadst8_1d(const int16_t *in, ptrdiff_t stride,
-                                       int16_t *out)
+                                       int16_t *out, int pass)
 {
     int t0, t0a, t1, t1a, t2, t2a, t3, t3a, t4, t4a, t5, t5a, t6, t6a, t7, t7a;
 
@@ -1000,7 +1000,7 @@ static av_always_inline void iadst8_1d(const int16_t *in, ptrdiff_t stride,
 itxfm_wrap(8, 5)
 
 static av_always_inline void idct16_1d(const int16_t *in, ptrdiff_t stride,
-                                       int16_t *out)
+                                       int16_t *out, int pass)
 {
     int t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15;
     int t0a, t1a, t2a, t3a, t4a, t5a, t6a, t7a;
@@ -1088,7 +1088,7 @@ static av_always_inline void idct16_1d(const int16_t *in, ptrdiff_t stride,
 }
 
 static av_always_inline void iadst16_1d(const int16_t *in, ptrdiff_t stride,
-                                        int16_t *out)
+                                        int16_t *out, int pass)
 {
     int t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15;
     int t0a, t1a, t2a, t3a, t4a, t5a, t6a, t7a;
@@ -1193,7 +1193,7 @@ static av_always_inline void iadst16_1d(const int16_t *in, ptrdiff_t stride,
 itxfm_wrap(16, 6)
 
 static av_always_inline void idct32_1d(const int16_t *in, ptrdiff_t stride,
-                                       int16_t *out)
+                                       int16_t *out, int pass)
 {
     int t0a  = ((IN(0) + IN(16)) * 11585 + (1 << 13)) >> 14;
     int t1a  = ((IN(0) - IN(16)) * 11585 + (1 << 13)) >> 14;
@@ -1401,20 +1401,25 @@ static av_always_inline void idct32_1d(const int16_t *in, ptrdiff_t stride,
 itxfm_wrapper(idct, idct, 32, 6)
 
 static av_always_inline void iwht4_1d(const int16_t *in, ptrdiff_t stride,
-                                      int16_t *out)
+                                      int16_t *out, int pass)
 {
     int t0, t1, t2, t3, t4;
 
-    // FIXME this is very ugly and isn't compatible with doing transpose
-    // in the detokenize step
-    t0 = IN(0) >> 2 * (stride == 1);
-    t1 = IN(3) >> 2 * (stride == 1);
-    t2 = IN(1) >> 2 * (stride == 1);
-    t3 = IN(2) >> 2 * (stride == 1);
+    if (pass == 0) {
+        t0 = IN(0) >> 2;
+        t1 = IN(3) >> 2;
+        t2 = IN(1) >> 2;
+        t3 = IN(2) >> 2;
+    } else {
+        t0 = IN(0);
+        t1 = IN(3);
+        t2 = IN(1);
+        t3 = IN(2);
+    }
 
     t0 += t2;
     t3 -= t1;
-    t4 = (t0 + t3) >> 1;
+    t4 = (t0 - t3) >> 1;
     t1 = t4 - t1;
     t2 = t4 - t2;
     t0 -= t1;

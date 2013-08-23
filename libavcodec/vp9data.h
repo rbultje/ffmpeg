@@ -464,7 +464,7 @@ static const int16_t vp9_default_scan_32x32[1024] = {
 
 // FIXME transpose scantables so we don't have to transpose before first
 // 1d idct/iadst
-static const int16_t *vp9_scans[4][4] = {
+static const int16_t *vp9_scans[5][4] = {
     {
         vp9_default_scan_4x4, vp9_col_scan_4x4,
         vp9_row_scan_4x4, vp9_default_scan_4x4
@@ -477,6 +477,9 @@ static const int16_t *vp9_scans[4][4] = {
     }, {
         vp9_default_scan_32x32, vp9_default_scan_32x32,
         vp9_default_scan_32x32, vp9_default_scan_32x32
+    }, { // lossless
+        vp9_default_scan_4x4, vp9_default_scan_4x4,
+        vp9_default_scan_4x4, vp9_default_scan_4x4
     }
 };
 
@@ -1018,7 +1021,7 @@ static const int16_t vp9_default_scan_32x32_nb[1024][2] = {
     { 990, 1021 }, { 959, 990 }, { 991, 1022 }, { 0, 0 },
 };
 
-static const int16_t (*vp9_scans_nb[4][4])[2] = {
+static const int16_t (*vp9_scans_nb[5][4])[2] = {
     {
         vp9_default_scan_4x4_nb, vp9_col_scan_4x4_nb,
         vp9_row_scan_4x4_nb, vp9_default_scan_4x4_nb
@@ -1031,6 +1034,9 @@ static const int16_t (*vp9_scans_nb[4][4])[2] = {
     }, {
         vp9_default_scan_32x32_nb, vp9_default_scan_32x32_nb,
         vp9_default_scan_32x32_nb, vp9_default_scan_32x32_nb
+    }, { // lossless
+        vp9_default_scan_4x4_nb, vp9_default_scan_4x4_nb,
+        vp9_default_scan_4x4_nb, vp9_default_scan_4x4_nb
     }
 };
 
