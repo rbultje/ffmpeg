@@ -1,0 +1,37 @@
+vp9:
+- inter mode loopfilter deltas, inter skip loopfilter handling
+- try to replace the ugly ref frame context (for bitstream parsing) with
+  some kind of LUT
+- sub8x8 mv/mode parsing and sub8x8 y inter pred
+- inter itxfm_add
+- inter uv pred/itxfm_add
+- prefetch magic
+- remove all memsets in context setting (above/left) and replace with faster
+  versions that understand we're only ever writing 1,2,4,8,16 bytes. I don't
+  know if these work (context-wise) without clipping to visible image size,
+  though.
+- likewise, use faster variants in intra pred preparation code
+- add "pass" argument to itxfm 1d functions in vp9dsp.c, so we can remove
+  the hack in iwht4_1d
+- transpose coefficients during reading
+- split coefficient reading in 2 functions, one for 32x32, one for rest
+- skip coefficient parsing/adding/etc (and loopfilter) for out-of-frame area
+- coefficient parsing dc contextualization using surrounding eob>0 is slow
+  and can be done in a single step
+- fix overhangs (e.g. if a block is 32pixels out of visible frame area, and
+  we're not using edges in allocation, then we overwrite the start of the
+  next line)
+- intra_recon alignment for a_buf
+- lossless (itxfm_add is called wrongly)
+- emu_edge in inter prediction
+- replace loopfilter masking logic with uint64_t LUTs
+- merge bl/bp arguments? basically bs=bl*3+bp
+- invert BL_NxN order?
+- maybe add itxfm_add_blk variants for inter (to do multiple 4x4 per time)
+- add eob arguments to itxfm_add functions so we can optimize for low eob
+- x86 simd
+- frame/tile mt
+- scalable/resolution changing
+- fix all failing fate tests (and remove -frames:v 1 argument to ensure it
+  tests inter frames also)
+
