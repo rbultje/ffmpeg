@@ -743,7 +743,7 @@ static const uint8_t bwh_tab[5][4][2] = {
 static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
                          VP56mv *pmv, int ref, int idx)
 {
-    static const uint8_t mv_ref_blk_off[4][4][8][2] = {
+    static const int8_t mv_ref_blk_off[4][4][8][2] = {
         [BL_64X64] = {
             [PARTITION_NONE]  = {{  3, -1 }, { -1,  3 }, {  4, -1 }, { -1,  4 },
                                  { -1, -1 }, {  0, -1 }, { -1,  0 }, {  6, -1 }},
@@ -779,7 +779,7 @@ static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
                                  { -2,  0 }, { -1, -2 }, { -2, -1 }, { -2, -2 }},
         }
     };
-    const uint8_t (*p)[2] = mv_ref_blk_off[b->bl][b->bp];
+    const int8_t (*p)[2] = mv_ref_blk_off[b->bl][b->bp];
 #define INVALID_MV 0x80008000U
     uint32_t mem = INVALID_MV;
     int i;
