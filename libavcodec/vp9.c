@@ -1662,9 +1662,10 @@ static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
     uint8_t (*p)[6][11] = s->prob.coef[b->tx][0 /* y */][!b->intra];
     unsigned (*c)[6][3] = s->counts.coef[b->tx][0 /* y */][!b->intra];
     unsigned (*e)[6][2] = s->counts.eob[b->tx][0 /* y */][!b->intra];
-    // FIXME skip fully out-of-visible-area tx-blocks
     int w4 = bwh_tab[b->bl + 1][b->bp][0] << 1;
     int h4 = bwh_tab[b->bl + 1][b->bp][1] << 1;
+    int end_x = FFMIN(2 * (s->cols - col), w4);
+    int end_y = FFMIN(2 * (s->rows - row), h4);
     int n, pl, x, y, step1d = 1 << b->tx, step = 1 << (b->tx * 2);
     int uvstep1d = 1 << b->uvtx, uvstep = 1 << (b->uvtx * 2), res;
     int16_t (*qmul)[2] = s->segmentation.feat[b->seg_id].qmul;
@@ -1693,8 +1694,8 @@ static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
             for (y = 1; y < step1d; y++)
                 a[x] |= a[x + y];
     }
-    for (n = 0, y = 0; y < h4; y += step1d) {
-        for (x = 0; x < w4; x += step1d, n += step) {
+    for (n = 0, y = 0; y < end_y; y += step1d) {
+        for (x = 0; x < end_x; x += step1d, n += step) {
             enum TxfmType txtp = vp9_intra_txfm_type[b->mode[b->tx == TX_4X4 &&
                                                              b->bl == BL_8X8 ?
                                                              n : 0]];
@@ -1718,6 +1719,8 @@ static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
     e = s->counts.eob[b->uvtx][1 /* uv */][!b->intra];
     w4 >>= 1;
     h4 >>= 1;
+    end_x >>= 1;
+    end_y >>= 1;
     for (pl = 0; pl < 2; pl++) {
         a = &s->above_uv_nnz_ctx[pl][col];
         l = &s->left_uv_nnz_ctx[pl][row & 7];
@@ -1729,8 +1732,8 @@ static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
                 for (y = 1; y < uvstep1d; y++)
                     a[x] |= a[x + y];
         }
-        for (n = 0, y = 0; y < h4; y += uvstep1d) {
-            for (x = 0; x < w4; x += uvstep1d, n += uvstep) {
+        for (n = 0, y = 0; y < end_y; y += uvstep1d) {
+            for (x = 0; x < end_x; x += uvstep1d, n += uvstep) {
                 int nnz = a[x] + l[y];
                 if ((res = decode_coeffs_b(&s->c, s->uvblock[pl] + 16 * n,
                                            16 * uvstep, b->uvtx, c, e, p, nnz,
@@ -1882,17 +1885,18 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
     VP9Context *s = ctx->priv_data;
     int w4 = bwh_tab[b->bl + 1][b->bp][0] << 1, step1d = 1 << b->tx, n;
     int h4 = bwh_tab[b->bl + 1][b->bp][1] << 1, x, y, step = 1 << (b->tx * 2);
+    int end_x = FFMIN(2 * (s->cols - col), w4);
+    int end_y = FFMIN(2 * (s->rows - row), h4);
     int tx = 4 * s->lossless + b->tx, uvtx = b->uvtx + 4 * s->lossless;
     int uvstep1d = 1 << b->uvtx, p;
     uint8_t *dst = s->f->data[0] + yoff;
 
-    // FIXME skip blocks fully out of visible area
     // FIXME fix overhangs (e.g. if pos+32>stride, then we need to emulate
     //       frame width, else we destroy pixels; for height, it also writes
     //       beyond allocated buffer edges)
-    for (n = 0, y = 0; y < h4; y += step1d) {
+    for (n = 0, y = 0; y < end_y; y += step1d) {
         uint8_t *ptr = dst;
-        for (x = 0; x < w4; x += step1d, ptr += 4 * step1d, n += step) {
+        for (x = 0; x < end_x; x += step1d, ptr += 4 * step1d, n += step) {
             int mode = b->mode[b->bl == BL_8X8 && b->tx == TX_4X4 ?
                                y * 2 + x : 0];
             // FIXME alignment
@@ -1912,12 +1916,14 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
     // U/V
     h4 >>= 1;
     w4 >>= 1;
+    end_x >>= 1;
+    end_y >>= 1;
     step = 1 << (b->uvtx * 2);
     for (p = 0; p < 2; p++) {
         dst = s->f->data[1 + p] + uvoff;
-        for (n = 0, y = 0; y < h4; y += uvstep1d) {
+        for (n = 0, y = 0; y < end_y; y += uvstep1d) {
             uint8_t *ptr = dst;
-            for (x = 0; x < w4; x += uvstep1d, ptr += 4 * uvstep1d, n += step) {
+            for (x = 0; x < end_x; x += uvstep1d, ptr += 4 * uvstep1d, n += step) {
                 int mode = b->uvmode;
                 // FIXME alignment
                 uint8_t a_buf[48], *a = &a_buf[16], l[32];
@@ -2224,8 +2230,6 @@ static void loopfilter_sb(AVCodecContext *ctx, struct VP9Filter *lflvl,
     // each v/h within the single x loop, but that only works if we work on
     // 8 pixel blocks, and we won't always do that (we want at least 16px
     // to use SSE2 optimizations, perhaps 32 for AVX2)
-
-    // FIXME also don't loopfilter edges that are out of visible area
 
     // filter edges between columns, Y plane (e.g. block1 | block2)
     for (y = 0; y < 8; y += 2, dst += 16 * ls_y, lvl += 16) {
