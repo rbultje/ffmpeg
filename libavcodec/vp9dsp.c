@@ -1470,11 +1470,12 @@ static av_always_inline void loop_filter(uint8_t *dst,  ptrdiff_t stride,
     int i;
 
     for (i = 0; i < sz; i++, dst += stridea) {
+        int p7, p6, p5, p4;
+        int p3 = dst[strideb * -4], p2 = dst[strideb * -3];
         int p1 = dst[strideb * -2], p0 = dst[strideb * -1];
         int q0 = dst[strideb * +0], q1 = dst[strideb * +1];
-        int p3 = dst[strideb * -4], p2 = dst[strideb * -3];
         int q2 = dst[strideb * +2], q3 = dst[strideb * +3];
-        int p4, p5, p6, p7, q4, q5, q6, q7;
+        int q4, q5, q6, q7;
         int fm = FFABS(p3 - p2) <= I && FFABS(p2 - p1) <= I &&
                  FFABS(p1 - p0) <= I && FFABS(q1 - q0) <= I &&
                  FFABS(q2 - q1) <= I && FFABS(q3 - q2) <= I &&
