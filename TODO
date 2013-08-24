@@ -13,7 +13,6 @@ vp9:
 - likewise, use faster variants in intra pred preparation code
 - transpose coefficients during reading
 - split coefficient reading in 2 functions, one for 32x32, one for rest
-- skip coefficient parsing/adding/etc (and loopfilter) for out-of-frame area
 - coefficient parsing dc contextualization using surrounding eob>0 is slow
   and can be done in a single step
 - fix overhangs (e.g. if a block is 32pixels out of visible frame area, and
@@ -29,6 +28,5 @@ vp9:
 - x86 simd
 - frame/tile mt
 - scalable/resolution changing
-- fix all failing fate tests (and remove -frames:v 1 argument to ensure it
-  tests inter frames also)
+- add >1 frames to all fate tests
 

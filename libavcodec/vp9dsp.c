@@ -1470,14 +1470,11 @@ static av_always_inline void loop_filter(uint8_t *dst,  ptrdiff_t stride,
     int i;
 
     for (i = 0; i < sz; i++, dst += stridea) {
-        int p7 = dst[strideb * -8], p6 = dst[strideb * -7];
-        int p5 = dst[strideb * -6], p4 = dst[strideb * -5];
-        int p3 = dst[strideb * -4], p2 = dst[strideb * -3];
         int p1 = dst[strideb * -2], p0 = dst[strideb * -1];
         int q0 = dst[strideb * +0], q1 = dst[strideb * +1];
+        int p3 = dst[strideb * -4], p2 = dst[strideb * -3];
         int q2 = dst[strideb * +2], q3 = dst[strideb * +3];
-        int q4 = dst[strideb * +4], q5 = dst[strideb * +5];
-        int q6 = dst[strideb * +6], q7 = dst[strideb * +7];
+        int p4, p5, p6, p7, q4, q5, q6, q7;
         int fm = FFABS(p3 - p2) <= I && FFABS(p2 - p1) <= I &&
                  FFABS(p1 - p0) <= I && FFABS(q1 - q0) <= I &&
                  FFABS(q2 - q1) <= I && FFABS(q3 - q2) <= I &&
@@ -1487,11 +1484,22 @@ static av_always_inline void loop_filter(uint8_t *dst,  ptrdiff_t stride,
         if (!fm)
             continue;
 
-        if (wd >= 16)
+        if (wd >= 16) {
+            p7 = dst[strideb * -8];
+            p6 = dst[strideb * -7];
+            p5 = dst[strideb * -6];
+            p4 = dst[strideb * -5];
+            q4 = dst[strideb * +4];
+            q5 = dst[strideb * +5];
+            q6 = dst[strideb * +6];
+            q7 = dst[strideb * +7];
+
             flat8out = FFABS(p7 - p0) <= 1 && FFABS(p6 - p0) <= 1 &&
                        FFABS(p5 - p0) <= 1 && FFABS(p4 - p0) <= 1 &&
                        FFABS(q4 - q0) <= 1 && FFABS(q5 - q0) <= 1 &&
                        FFABS(q6 - q0) <= 1 && FFABS(q7 - q0) <= 1;
+        }
+
         if (wd >= 8)
             flat8in = FFABS(p3 - p0) <= 1 && FFABS(p2 - p0) <= 1 &&
                       FFABS(p1 - p0) <= 1 && FFABS(q1 - q0) <= 1 &&
