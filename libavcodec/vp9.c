@@ -1978,7 +1978,7 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
                         ptrdiff_t yoff, ptrdiff_t uvoff)
 {
     VP9Context *s = ctx->priv_data;
-    static uint8_t bwl_fn_tab[5][4] = {
+    static const uint8_t bwl_fn_tab[5][4] = {
         { 0, 0, 1 }, { 1, 1, 2 }, { 2, 2, 3 }, { 3, 3, 4, 4 }, { 4, 4, 4, 4 }
     };
 
