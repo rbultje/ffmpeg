@@ -859,12 +859,9 @@ static void type_a##_##type_b##_##sz##x##sz##_add_c(uint8_t *dst, \
 { \
     int i, j; \
     int16_t tmp[sz * sz], out[sz]; \
-    for (i = 0; i < sz; i++) { \
-        type_a##sz##_1d(block, 1, tmp + i * sz, 0); \
-        for (j = 0; j < sz; j++) \
-            block[j] = 0; \
-        block += sz; \
-    } \
+    for (i = 0; i < sz; i++) \
+        type_a##sz##_1d(block + i, sz, tmp + i * sz, 0); \
+    memset(block, 0, sz * sz * sizeof(*block)); \
     for (i = 0; i < sz; i++) { \
         type_b##sz##_1d(tmp + i, sz, out, 1); \
         for (j = 0; j < sz; j++) \

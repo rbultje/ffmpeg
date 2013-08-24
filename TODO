@@ -11,7 +11,6 @@ vp9:
   know if these work (context-wise) without clipping to visible image size,
   though.
 - likewise, use faster variants in intra pred preparation code
-- transpose coefficients during reading
 - split coefficient reading in 2 functions, one for 32x32, one for rest
 - coefficient parsing dc contextualization using surrounding eob>0 is slow
   and can be done in a single step
