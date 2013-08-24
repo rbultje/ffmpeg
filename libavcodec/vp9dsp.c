@@ -814,7 +814,8 @@ static void hor_up_##size##x##size##_c(uint8_t *dst, ptrdiff_t stride, \
         memcpy(dst + j*stride, v + j*2, size); \
     for (j = size / 2; j < size; j++) { \
         memcpy(dst + j*stride, v + j*2, size*2 - 2 - j*2); \
-        memset(dst + j*stride + size*2 - 2 - j*2, left[size - 1], j + 1); \
+        memset(dst + j*stride + size*2 - 2 - j*2, left[size - 1], \
+               2 + j*2 - size); \
     } \
 }
 
