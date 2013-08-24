@@ -18,7 +18,6 @@ vp9:
 - fix overhangs (e.g. if a block is 32pixels out of visible frame area, and
   we're not using edges in allocation, then we overwrite the start of the
   next line)
-- intra_recon alignment for a_buf
 - emu_edge in inter prediction
 - replace loopfilter masking logic with uint64_t LUTs
 - merge bl/bp arguments? basically bs=bl*3+bp

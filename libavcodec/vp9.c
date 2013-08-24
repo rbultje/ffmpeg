@@ -1899,8 +1899,8 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
         for (x = 0; x < end_x; x += step1d, ptr += 4 * step1d, n += step) {
             int mode = b->mode[b->bl == BL_8X8 && b->tx == TX_4X4 ?
                                y * 2 + x : 0];
-            // FIXME alignment
-            uint8_t a_buf[48], *a = &a_buf[16], l[32];
+            LOCAL_ALIGNED_16(uint8_t, a_buf, [48]);
+            uint8_t *a = &a_buf[16], l[32];
             enum TxfmType txtp = vp9_intra_txfm_type[mode];
 
             mode = check_intra_mode(s, mode, &a, ptr, s->f->linesize[0], l,
@@ -1925,8 +1925,8 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
             uint8_t *ptr = dst;
             for (x = 0; x < end_x; x += uvstep1d, ptr += 4 * uvstep1d, n += step) {
                 int mode = b->uvmode;
-                // FIXME alignment
-                uint8_t a_buf[48], *a = &a_buf[16], l[32];
+                LOCAL_ALIGNED_16(uint8_t, a_buf, [48]);
+                uint8_t *a = &a_buf[16], l[32];
 
                 mode = check_intra_mode(s, mode, &a, ptr, s->f->linesize[1], l,
                                         col, x, w4, row, y, b->uvtx, p + 1);
