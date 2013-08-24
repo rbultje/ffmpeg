@@ -23,7 +23,6 @@ vp9:
 - merge bl/bp arguments? basically bs=bl*3+bp
 - invert BL_NxN order?
 - maybe add itxfm_add_blk variants for inter (to do multiple 4x4 per time)
-- add eob arguments to itxfm_add functions so we can optimize for low eob
 - x86 simd
 - frame/tile mt
 - scalable/resolution changing

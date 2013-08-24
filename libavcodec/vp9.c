@@ -185,7 +185,9 @@ typedef struct VP9Context {
     struct VP9Filter *lflvl;
 
     DECLARE_ALIGNED(16, int16_t, block)[4096];
+    uint8_t eob[256];
     DECLARE_ALIGNED(16, int16_t, uvblock)[2][1024];
+    uint8_t uveob[2][64];
 } VP9Context;
 
 static int update_size(AVCodecContext *ctx, int w, int h)
@@ -1653,7 +1655,7 @@ static int decode_coeffs_b(VP56RangeCoder *c, int16_t *coef, int n_coeffs,
         tp = p[band][nnz];
     } while (++i < n_coeffs);
 
-    return !!i;
+    return i;
 }
 
 static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
@@ -1704,7 +1706,12 @@ static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
                                        b->tx, c, e, p, nnz, yscans[txtp],
                                        ynbs[txtp], y_band_counts, qmul[0])) < 0)
                 return res;
-            a[x] = l[y] = res;
+            a[x] = l[y] = !!res;
+            if (b->tx > TX_8X8) {
+                AV_WN16A(&s->eob[n], res);
+            } else {
+                s->eob[n] = res;
+            }
         }
     }
     if (b->tx > TX_4X4) { // FIXME slow
@@ -1740,7 +1747,12 @@ static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
                                            uvscan, uvnb, uv_band_counts,
                                            qmul[1])) < 0)
                     return res;
-                a[x] = l[y] = res;
+                a[x] = l[y] = !!res;
+                if (b->uvtx > TX_8X8) {
+                    AV_WN16A(&s->uveob[pl][n], res);
+                } else {
+                    s->uveob[pl][n] = res;
+                }
             }
         }
         if (b->uvtx > TX_4X4) { // FIXME slow
@@ -1902,13 +1914,14 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
             LOCAL_ALIGNED_16(uint8_t, a_buf, [48]);
             uint8_t *a = &a_buf[16], l[32];
             enum TxfmType txtp = vp9_intra_txfm_type[mode];
+            int eob = b->tx > TX_8X8 ? AV_RN16A(&s->eob[n]) : s->eob[n];
 
             mode = check_intra_mode(s, mode, &a, ptr, s->f->linesize[0], l,
                                     col, x, w4, row, y, b->tx, 0);
             s->dsp.intra_pred[b->tx][mode](ptr, s->f->linesize[0], l, a);
-            // FIXME eob
-            s->dsp.itxfm_add[tx][txtp](ptr, s->f->linesize[0],
-                                       s->block + 16 * n, 16 * step);
+            if (eob)
+                s->dsp.itxfm_add[tx][txtp](ptr, s->f->linesize[0],
+                                           s->block + 16 * n, eob);
         }
         dst += 4 * s->f->linesize[0] * step1d;
     }
@@ -1927,14 +1940,14 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
                 int mode = b->uvmode;
                 LOCAL_ALIGNED_16(uint8_t, a_buf, [48]);
                 uint8_t *a = &a_buf[16], l[32];
+                int eob = b->uvtx > TX_8X8 ? AV_RN16A(&s->uveob[p][n]) : s->uveob[p][n];
 
                 mode = check_intra_mode(s, mode, &a, ptr, s->f->linesize[1], l,
                                         col, x, w4, row, y, b->uvtx, p + 1);
                 s->dsp.intra_pred[b->uvtx][mode](ptr, s->f->linesize[1], l, a);
-                // FIXME eob
-                s->dsp.itxfm_add[uvtx][DCT_DCT](ptr, s->f->linesize[1],
-                                                s->uvblock[p] + 16 * n,
-                                                   16 * step);
+                if (eob)
+                    s->dsp.itxfm_add[uvtx][DCT_DCT](ptr, s->f->linesize[1],
+                                                    s->uvblock[p] + 16 * n, eob);
             }
             dst += 4 * uvstep1d * s->f->linesize[1];
         }
