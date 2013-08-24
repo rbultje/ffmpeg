@@ -1809,6 +1809,11 @@ static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **
     mode = mode_conv[mode][have_left][have_top];
     if (edges[mode].needs_top) {
         uint8_t *top;
+        int n_px_need = 4 << tx, n_px_have = (((s->cols - col) << !p) - x) * 4;
+        int n_px_need_tr = 0;
+
+        if (tx == TX_4X4 && edges[mode].needs_topright && have_right)
+            n_px_need_tr = 4;
 
         // if top of sb64-row, use s->intra_pred_data[] instead of
         // dst[-stride] for intra prediction (it contains pre- instead of
@@ -1819,13 +1824,20 @@ static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **
 
         if (have_top &&
             (!edges[mode].needs_topleft || have_left) &&
-            (tx != TX_4X4 || !edges[mode].needs_topright || have_right)) {
+            (tx != TX_4X4 || !edges[mode].needs_topright || have_right) &&
+            n_px_need + n_px_need_tr <= n_px_have) {
             *a = top;
         } else {
             if (have_top) {
-                memcpy(*a, top, 4 << tx);
+                if (n_px_need <= n_px_have) {
+                    memcpy(*a, top, n_px_need);
+                } else {
+                    memcpy(*a, top, n_px_have);
+                    memset(&(*a)[n_px_have], (*a)[n_px_have - 1],
+                           n_px_need - n_px_have);
+                }
             } else {
-                memset(*a, 127, 4 << tx);
+                memset(*a, 127, n_px_need);
             }
             if (edges[mode].needs_topleft) {
                 if (have_left && have_top) {
@@ -1835,7 +1847,8 @@ static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **
                 }
             }
             if (tx == TX_4X4 && edges[mode].needs_topright) {
-                if (have_top && have_right) {
+                if (have_top && have_right &&
+                    n_px_need + n_px_need_tr <= n_px_have) {
                     memcpy(&(*a)[4], &top[4], 4);
                 } else {
                     memset(&(*a)[4], (*a)[3], 4);
@@ -1845,10 +1858,15 @@ static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **
     }
     if (edges[mode].needs_left) {
         if (have_left) {
-            int i;
+            int n_px_need = 4 << tx, i, n_px_have = (((s->rows - row) << !p) - y) * 4;
 
-            for (i = 0; i < (4 << tx); i++) {
-                l[i] = dst[i * stride - 1];
+            if (n_px_need <= n_px_have) {
+                for (i = 0; i < n_px_need; i++)
+                    l[i] = dst[i * stride - 1];
+            } else {
+                for (i = 0; i < n_px_have; i++)
+                    l[i] = dst[i * stride - 1];
+                memset(&l[i], l[i - 1], n_px_need - n_px_have);
             }
         } else {
             memset(l, 129, 4 << tx);
