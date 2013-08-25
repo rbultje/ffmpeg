@@ -739,12 +739,14 @@ typedef struct {
     enum TxfmMode tx, uvtx;
 } VP9Block;
 
-static const uint8_t bwh4_tab[N_BS_SIZES][2] = {
-    { 16, 16 }, { 16, 8 }, { 8, 16 }, { 8, 8 }, { 8, 4 }, { 4, 8 },
-    { 4, 4 }, { 4, 2 }, { 2, 4 }, { 2, 2 }, { 2, 1 }, { 1, 2 }, { 1, 1 },
-}, bwh8_tab[N_BS_SIZES][2] = {
-    { 8, 8 }, { 8, 4 }, { 4, 8 }, { 4, 4 }, { 4, 2 }, { 2, 4 },
-    { 2, 2 }, { 2, 1 }, { 1, 2 }, { 1, 1 }, { 1, 1 }, { 1, 1 }, { 1, 1 },
+static const uint8_t bwh_tab[2][N_BS_SIZES][2] = {
+    {
+        { 16, 16 }, { 16, 8 }, { 8, 16 }, { 8, 8 }, { 8, 4 }, { 4, 8 },
+        { 4, 4 }, { 4, 2 }, { 2, 4 }, { 2, 2 }, { 2, 1 }, { 1, 2 }, { 1, 1 },
+    }, {
+        { 8, 8 }, { 8, 4 }, { 4, 8 }, { 4, 4 }, { 4, 2 }, { 2, 4 },
+        { 2, 2 }, { 2, 1 }, { 1, 2 }, { 1, 1 }, { 1, 1 }, { 1, 1 }, { 1, 1 },
+    }
 };
 
 static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
@@ -927,8 +929,8 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
     };
     VP9Context *s = ctx->priv_data;
     enum TxfmMode max_tx = max_tx_for_bl_bp[b->bs];
-    int w4 = FFMIN(s->cols - col, bwh8_tab[b->bs][0]);
-    int h4 = FFMIN(s->rows - row, bwh8_tab[b->bs][1]), y;
+    int w4 = FFMIN(s->cols - col, bwh_tab[1][b->bs][0]);
+    int h4 = FFMIN(s->rows - row, bwh_tab[1][b->bs][1]), y;
     int have_a = row > 0, have_l = col > s->tiling.tile_col_start, row7 = row & 7;
 
     if (!s->segmentation.enabled) {
@@ -1073,8 +1075,8 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
                                           vp9_default_kf_ymode_probs[*a][*l]);
             b->mode[3] = b->mode[2] = b->mode[1] = b->mode[0];
             // FIXME this can probably be optimized
-            memset(a, b->mode[0], bwh4_tab[b->bs][0]);
-            memset(l, b->mode[0], bwh4_tab[b->bs][1]);
+            memset(a, b->mode[0], bwh_tab[0][b->bs][0]);
+            memset(l, b->mode[0], bwh_tab[0][b->bs][1]);
         }
         b->uvmode = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                      vp9_default_kf_uvmode_probs[b->mode[3]]);
@@ -1664,7 +1666,7 @@ static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
     uint8_t (*p)[6][11] = s->prob.coef[b->tx][0 /* y */][!b->intra];
     unsigned (*c)[6][3] = s->counts.coef[b->tx][0 /* y */][!b->intra];
     unsigned (*e)[6][2] = s->counts.eob[b->tx][0 /* y */][!b->intra];
-    int w4 = bwh8_tab[b->bs][0] << 1, h4 = bwh8_tab[b->bs][1] << 1;
+    int w4 = bwh_tab[1][b->bs][0] << 1, h4 = bwh_tab[1][b->bs][1] << 1;
     int end_x = FFMIN(2 * (s->cols - col), w4);
     int end_y = FFMIN(2 * (s->rows - row), h4);
     int n, pl, x, y, step1d = 1 << b->tx, step = 1 << (b->tx * 2);
@@ -1894,8 +1896,8 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
                         ptrdiff_t yoff, ptrdiff_t uvoff)
 {
     VP9Context *s = ctx->priv_data;
-    int w4 = bwh8_tab[b->bs][0] << 1, step1d = 1 << b->tx, n;
-    int h4 = bwh8_tab[b->bs][1] << 1, x, y, step = 1 << (b->tx * 2);
+    int w4 = bwh_tab[1][b->bs][0] << 1, step1d = 1 << b->tx, n;
+    int h4 = bwh_tab[1][b->bs][1] << 1, x, y, step = 1 << (b->tx * 2);
     int end_x = FFMIN(2 * (s->cols - col), w4);
     int end_y = FFMIN(2 * (s->rows - row), h4);
     int tx = 4 * s->lossless + b->tx, uvtx = b->uvtx + 4 * s->lossless;
@@ -1986,7 +1988,7 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
         printf("Sub8x8 inter prediction not yet implemented\n");
     } else {
         AVFrame *ref1 = s->refs[s->refidx[b->ref[0]]];
-        int bw = bwlog_tab[0][b->bs], bh = bwh4_tab[b->bs][1] * 4;
+        int bw = bwlog_tab[0][b->bs], bh = bwh_tab[0][b->bs][1] * 4;
 
         // y inter pred
         mc_luma_dir(s->dsp.mc[bw][b->filter][0],
@@ -2092,7 +2094,7 @@ static int decode_b(AVCodecContext *ctx, int row, int col,
     VP9Context *s = ctx->priv_data;
     enum BlockSize bs = bl * 3 + bp;
     VP9Block b;
-    int res, y, w4 = bwh8_tab[bs][0], h4 = bwh8_tab[bs][1], lvl;
+    int res, y, w4 = bwh_tab[1][bs][0], h4 = bwh_tab[1][bs][1], lvl;
 
     b.bs = bs;
     if ((res = decode_mode(ctx, row, col, &b)) < 0)

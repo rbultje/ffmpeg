@@ -14,7 +14,9 @@ vp9:
   and can be done in a single step
 - fix overhangs (e.g. if a block is 32pixels out of visible frame area, and
   we're not using edges in allocation, then we overwrite the start of the
-  next line)
+  next line); write a fate test to regtest this (e.g. 65x65 image with using
+  64x32 for bottomleft sb64 and 32x64 for topright sb64; use the tx32x32 to
+  trigger this in itxfm_add as well as prediction.
 - emu_edge in inter prediction
 - replace loopfilter masking logic with uint64_t LUTs
 - maybe add itxfm_add_blk variants for inter (to do multiple 4x4 per time)
@@ -22,4 +24,6 @@ vp9:
 - frame/tile mt
 - scalable/resolution changing
 - add >1 frames to all fate tests
+- fate tests for resolution changing, tiling (row/col), the weird UV loopfilter
+  hack to use 8x8 lf for 16x16 on odd col/row image size edges
 
