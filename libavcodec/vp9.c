@@ -177,7 +177,7 @@ typedef struct VP9Context {
     enum TxfmMode txfmmode:3;
     enum CompPredMode comppredmode:2;
 
-    // cpntextual (left/above) cache
+    // contextual (left/above) cache
     uint8_t left_partition_ctx[8], *above_partition_ctx;
     uint8_t left_mode_ctx[16], *above_mode_ctx;
     // FIXME maybe merge some of the below in a flags field?
