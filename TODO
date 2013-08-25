@@ -7,9 +7,7 @@ vp9:
 - inter uv pred/itxfm_add
 - prefetch magic
 - remove all memsets in context setting (above/left) and replace with faster
-  versions that understand we're only ever writing 1,2,4,8,16 bytes. I don't
-  know if these work (context-wise) without clipping to visible image size,
-  though.
+  versions that understand we're only ever writing 1,2,4,8,16 bytes.
 - likewise, use faster variants in intra pred preparation code
 - split coefficient reading in 2 functions, one for 32x32, one for rest
 - coefficient parsing dc contextualization using surrounding eob>0 is slow
