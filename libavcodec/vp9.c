@@ -2631,7 +2631,7 @@ static void adapt_probs(VP9Context *s)
                    s->counts.mv_comp[i].class0[1], 20, 128);
         pp = p->mv_comp[i].bits;
         c2 = s->counts.mv_comp[i].bits;
-        for (j = 0; j < 10; i++)
+        for (j = 0; j < 10; j++)
             adapt_prob(&pp[j], c2[j][0], c2[j][1], 20, 128);
 
         for (j = 0; j < 2; j++) {
