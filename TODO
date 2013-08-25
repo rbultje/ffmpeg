@@ -19,8 +19,6 @@ vp9:
   next line)
 - emu_edge in inter prediction
 - replace loopfilter masking logic with uint64_t LUTs
-- merge bl/bp arguments? basically bs=bl*3+bp
-- invert BL_NxN order?
 - maybe add itxfm_add_blk variants for inter (to do multiple 4x4 per time)
 - x86 simd
 - frame/tile mt

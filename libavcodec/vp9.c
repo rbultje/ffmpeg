@@ -35,13 +35,28 @@ enum CompPredMode {
     PRED_SWITCHABLE,
 };
 
-// FIXME maybe invert order here, may make some calculations down under
-// a cycle faster or so
 enum BlockLevel {
     BL_64X64,
     BL_32X32,
     BL_16X16,
     BL_8X8,
+};
+
+enum BlockSize {
+    BS_64x64,
+    BS_64x32,
+    BS_32x64,
+    BS_32x32,
+    BS_32x16,
+    BS_16x32,
+    BS_16x16,
+    BS_16x8,
+    BS_8x16,
+    BS_8x8,
+    BS_8x4,
+    BS_4x8,
+    BS_4x4,
+    N_BS_SIZES,
 };
 
 struct mv_storage {
@@ -721,65 +736,50 @@ typedef struct {
     unsigned seg_id:3, intra:1, comp:1, ref[2], mode[4], uvmode, skip:1;
     enum FilterMode filter;
     VP56mv mv[4 /* b_idx */][2 /* ref */];
-    enum BlockLevel bl;
-    enum BlockPartition bp;
+    enum BlockSize bs;
     enum TxfmMode tx, uvtx;
 } VP9Block;
 
-// the padding is to be able to distinguish between things that act on
-// a per-8x8 block basis (like partitioning etc.), and things that act
-// on a per-4x4 block basis (like intra mode).
-static const uint8_t bwh_tab[5][4][2] = {
-    { { 16, 16 }, { 16, 8 }, { 8, 16 } },
-    { { 8, 8 }, { 8, 4 }, { 4, 8 } },
-    { { 4, 4 }, { 4, 2 }, { 2, 4 } },
-    { { 2, 2 }, { 2, 1 }, { 1, 2 }, { 1, 1 } },
-    // For the sub8x8 case, these constants are only used for things that
-    // act on a per-8x8 block basis, and thus we round everything up to
-    // at least 1
-    { { 1, 1 }, { 1, 1 }, { 1, 1 }, { 1, 1 } },
+static const uint8_t bwh4_tab[N_BS_SIZES][2] = {
+    { 16, 16 }, { 16, 8 }, { 8, 16 }, { 8, 8 }, { 8, 4 }, { 4, 8 },
+    { 4, 4 }, { 4, 2 }, { 2, 4 }, { 2, 2 }, { 2, 1 }, { 1, 2 }, { 1, 1 },
+}, bwh8_tab[N_BS_SIZES][2] = {
+    { 8, 8 }, { 8, 4 }, { 4, 8 }, { 4, 4 }, { 4, 2 }, { 2, 4 },
+    { 2, 2 }, { 2, 1 }, { 1, 2 }, { 1, 1 }, { 1, 1 }, { 1, 1 }, { 1, 1 },
 };
 
 static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
                          VP56mv *pmv, int ref, int idx)
 {
-    static const int8_t mv_ref_blk_off[4][4][8][2] = {
-        [BL_64X64] = {
-            [PARTITION_NONE]  = {{  3, -1 }, { -1,  3 }, {  4, -1 }, { -1,  4 },
-                                 { -1, -1 }, {  0, -1 }, { -1,  0 }, {  6, -1 }},
-            [PARTITION_H]     = {{  0, -1 }, { -1,  0 }, {  4, -1 }, { -1,  2 },
-                                 { -1, -1 }, {  0, -3 }, { -3,  0 }, {  2, -1 }},
-            [PARTITION_V]     = {{ -1,  0 }, {  0, -1 }, { -1,  4 }, {  2, -1 },
-                                 { -1, -1 }, { -3,  0 }, {  0, -3 }, { -1,  2 }},
-        },
-        [BL_32X32] = {
-            [PARTITION_NONE]  = {{  1, -1 }, { -1,  1 }, {  2, -1 }, { -1,  2 },
-                                 { -1, -1 }, {  0, -3 }, { -3,  0 }, { -3, -3 }},
-            [PARTITION_H]     = {{  0, -1 }, { -1,  0 }, {  2, -1 }, { -1, -1 },
-                                 { -1,  1 }, {  0, -3 }, { -3,  0 }, { -3, -3 }},
-            [PARTITION_V]     = {{ -1,  0 }, {  0, -1 }, { -1,  2 }, { -1, -1 },
-                                 {  1, -1 }, { -3,  0 }, {  0, -3 }, { -3, -3 }},
-        },
-        [BL_16X16] = {
-            [PARTITION_NONE]  = {{  0, -1 }, { -1,  0 }, {  1, -1 }, { -1,  1 },
-                                 { -1, -1 }, {  0, -3 }, { -3,  0 }, { -3, -3 }},
-            [PARTITION_H]     = {{  0, -1 }, { -1,  0 }, {  1, -1 }, { -1, -1 },
-                                 {  0, -2 }, { -2,  0 }, { -2, -1 }, { -1, -2 }},
-            [PARTITION_V]     = {{ -1,  0 }, {  0, -1 }, { -1,  1 }, { -1, -1 },
-                                 { -2,  0 }, {  0, -2 }, { -1, -2 }, { -2, -1 }},
-        },
-        [BL_8X8] = {
-            [PARTITION_NONE]  = {{  0, -1 }, { -1,  0 }, { -1, -1 }, {  0, -2 },
-                                 { -2,  0 }, { -1, -2 }, { -2, -1 }, { -2, -2 }},
-            [PARTITION_H]     = {{  0, -1 }, { -1,  0 }, { -1, -1 }, {  0, -2 },
-                                 { -2,  0 }, { -1, -2 }, { -2, -1 }, { -2, -2 }},
-            [PARTITION_V]     = {{  0, -1 }, { -1,  0 }, { -1, -1 }, {  0, -2 },
-                                 { -2,  0 }, { -1, -2 }, { -2, -1 }, { -2, -2 }},
-            [PARTITION_SPLIT] = {{  0, -1 }, { -1,  0 }, { -1, -1 }, {  0, -2 },
-                                 { -2,  0 }, { -1, -2 }, { -2, -1 }, { -2, -2 }},
-        }
+    static const int8_t mv_ref_blk_off[N_BS_SIZES][8][2] = {
+        [BS_64x64] = {{  3, -1 }, { -1,  3 }, {  4, -1 }, { -1,  4 },
+                      { -1, -1 }, {  0, -1 }, { -1,  0 }, {  6, -1 }},
+        [BS_64x32] = {{  0, -1 }, { -1,  0 }, {  4, -1 }, { -1,  2 },
+                      { -1, -1 }, {  0, -3 }, { -3,  0 }, {  2, -1 }},
+        [BS_32x64] = {{ -1,  0 }, {  0, -1 }, { -1,  4 }, {  2, -1 },
+                      { -1, -1 }, { -3,  0 }, {  0, -3 }, { -1,  2 }},
+        [BS_32x32] = {{  1, -1 }, { -1,  1 }, {  2, -1 }, { -1,  2 },
+                      { -1, -1 }, {  0, -3 }, { -3,  0 }, { -3, -3 }},
+        [BS_32x16] = {{  0, -1 }, { -1,  0 }, {  2, -1 }, { -1, -1 },
+                      { -1,  1 }, {  0, -3 }, { -3,  0 }, { -3, -3 }},
+        [BS_16x32] = {{ -1,  0 }, {  0, -1 }, { -1,  2 }, { -1, -1 },
+                      {  1, -1 }, { -3,  0 }, {  0, -3 }, { -3, -3 }},
+        [BS_16x16] = {{  0, -1 }, { -1,  0 }, {  1, -1 }, { -1,  1 },
+                      { -1, -1 }, {  0, -3 }, { -3,  0 }, { -3, -3 }},
+        [BS_16x8]  = {{  0, -1 }, { -1,  0 }, {  1, -1 }, { -1, -1 },
+                      {  0, -2 }, { -2,  0 }, { -2, -1 }, { -1, -2 }},
+        [BS_8x16]  = {{ -1,  0 }, {  0, -1 }, { -1,  1 }, { -1, -1 },
+                      { -2,  0 }, {  0, -2 }, { -1, -2 }, { -2, -1 }},
+        [BS_8x8]   = {{  0, -1 }, { -1,  0 }, { -1, -1 }, {  0, -2 },
+                      { -2,  0 }, { -1, -2 }, { -2, -1 }, { -2, -2 }},
+        [BS_8x4]   = {{  0, -1 }, { -1,  0 }, { -1, -1 }, {  0, -2 },
+                      { -2,  0 }, { -1, -2 }, { -2, -1 }, { -2, -2 }},
+        [BS_4x8]   = {{  0, -1 }, { -1,  0 }, { -1, -1 }, {  0, -2 },
+                      { -2,  0 }, { -1, -2 }, { -2, -1 }, { -2, -2 }},
+        [BS_4x4]   = {{  0, -1 }, { -1,  0 }, { -1, -1 }, {  0, -2 },
+                      { -2,  0 }, { -1, -2 }, { -2, -1 }, { -2, -2 }},
     };
-    const int8_t (*p)[2] = mv_ref_blk_off[b->bl][b->bp];
+    const int8_t (*p)[2] = mv_ref_blk_off[b->bs];
 #define INVALID_MV 0x80008000U
     uint32_t mem = INVALID_MV;
     int i;
@@ -916,22 +916,20 @@ static av_always_inline int read_mv_component(VP9Context *s, int idx, int hp)
 
 static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
 {
-    static const uint8_t left_ctx[4][4] = {
-        { 0x0, 0x8, 0x0 }, { 0x8, 0xc, 0x8 }, { 0xc, 0xe, 0xc },
-        { 0xe, 0xf, 0xe, 0xf }
+    static const uint8_t left_ctx[N_BS_SIZES] = {
+        0x0, 0x8, 0x0, 0x8, 0xc, 0x8, 0xc, 0xe, 0xc, 0xe, 0xf, 0xe, 0xf
     };
-    static const uint8_t above_ctx[4][4] = {
-        { 0x0, 0x0, 0x8 }, { 0x8, 0x8, 0xc }, { 0xc, 0xc, 0xe },
-        { 0xe, 0xe, 0xf, 0xf }
+    static const uint8_t above_ctx[N_BS_SIZES] = {
+        0x0, 0x0, 0x8, 0x8, 0x8, 0xc, 0xc, 0xc, 0xe, 0xe, 0xe, 0xf, 0xf
     };
-    static const uint8_t max_tx_for_bl_bp[4][4] = {
-        { TX_32X32, TX_32X32, TX_32X32 }, { TX_32X32, TX_16X16, TX_16X16 },
-        { TX_16X16, TX_8X8, TX_8X8 }, { TX_8X8, TX_4X4, TX_4X4, TX_4X4 }
+    static const uint8_t max_tx_for_bl_bp[N_BS_SIZES] = {
+        TX_32X32, TX_32X32, TX_32X32, TX_32X32, TX_16X16, TX_16X16,
+        TX_16X16, TX_8X8, TX_8X8, TX_8X8, TX_4X4, TX_4X4, TX_4X4
     };
     VP9Context *s = ctx->priv_data;
-    enum TxfmMode max_tx = max_tx_for_bl_bp[b->bl][b->bp];
-    int w4 = FFMIN(s->cols - col, bwh_tab[b->bl + 1][b->bp][0]);
-    int h4 = FFMIN(s->rows - row, bwh_tab[b->bl + 1][b->bp][1]), y;
+    enum TxfmMode max_tx = max_tx_for_bl_bp[b->bs];
+    int w4 = FFMIN(s->cols - col, bwh8_tab[b->bs][0]);
+    int h4 = FFMIN(s->rows - row, bwh8_tab[b->bs][1]), y;
     int have_a = row > 0, have_l = col > s->tiling.tile_col_start, row7 = row & 7;
 
     if (!s->segmentation.enabled) {
@@ -1044,23 +1042,23 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
         uint8_t *l = &s->left_mode_ctx[(row7) << 1];
 
         b->comp = 0;
-        if (b->bl == BL_8X8 && b->bp != PARTITION_NONE) {
+        if (b->bs > BS_8x8) {
             // FIXME the memory storage intermediates here aren't really
             // necessary, they're just there to make the code slightly
             // simpler for now
             b->mode[0] = a[0] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                     vp9_default_kf_ymode_probs[a[0]][l[0]]);
-            if (b->bp != PARTITION_H) {
+            if (b->bs != BS_8x4) {
                 b->mode[1] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                  vp9_default_kf_ymode_probs[a[1]][b->mode[0]]);
                 l[0] = a[1] = b->mode[1];
             } else {
                 l[0] = a[1] = b->mode[1] = b->mode[0];
             }
-            if (b->bp != PARTITION_V) {
+            if (b->bs != BS_4x8) {
                 b->mode[2] = a[0] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                         vp9_default_kf_ymode_probs[a[0]][l[1]]);
-                if (b->bp != PARTITION_H) {
+                if (b->bs != BS_8x4) {
                     b->mode[3] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                   vp9_default_kf_ymode_probs[a[1]][b->mode[2]]);
                     l[1] = a[1] = b->mode[3];
@@ -1076,29 +1074,29 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
                                           vp9_default_kf_ymode_probs[*a][*l]);
             b->mode[3] = b->mode[2] = b->mode[1] = b->mode[0];
             // FIXME this can probably be optimized
-            memset(a, b->mode[0], bwh_tab[b->bl][b->bp][0]);
-            memset(l, b->mode[0], bwh_tab[b->bl][b->bp][1]);
+            memset(a, b->mode[0], bwh4_tab[b->bs][0]);
+            memset(l, b->mode[0], bwh4_tab[b->bs][1]);
         }
         b->uvmode = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                      vp9_default_kf_uvmode_probs[b->mode[3]]);
     } else if (b->intra) {
         b->comp = 0;
-        if (b->bl == BL_8X8 && b->bp != PARTITION_NONE) {
+        if (b->bs > BS_8x8) {
             b->mode[0] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                           s->prob.p.y_mode[0]);
             s->counts.y_mode[0][b->mode[0]]++;
-            if (b->bp != PARTITION_H) {
+            if (b->bs != BS_8x4) {
                 b->mode[1] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                               s->prob.p.y_mode[0]);
                 s->counts.y_mode[0][b->mode[1]]++;
             } else {
                 b->mode[1] = b->mode[0];
             }
-            if (b->bp != PARTITION_V) {
+            if (b->bs != BS_4x8) {
                 b->mode[2] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                               s->prob.p.y_mode[0]);
                 s->counts.y_mode[0][b->mode[2]]++;
-                if (b->bp != PARTITION_H) {
+                if (b->bs != BS_8x4) {
                     b->mode[3] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                                   s->prob.p.y_mode[0]);
                     s->counts.y_mode[0][b->mode[3]]++;
@@ -1110,10 +1108,10 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
                 b->mode[3] = b->mode[1];
             }
         } else {
-            static const uint8_t size_group[4][4] = {
-                { 3, 3, 3 }, { 3, 2, 2 }, { 2, 1, 1 }, { 1 }
+            static const uint8_t size_group[N_BS_SIZES] = {
+                3, 3, 3, 3, 2, 2, 2, 1, 1, 1, 0, 0, 0
             };
-            int sz = size_group[b->bl][b->bp];
+            int sz = size_group[b->bs];
 
             b->mode[0] = vp8_rac_get_tree(&s->c, vp9_intramode_tree,
                                           s->prob.p.y_mode[sz]);
@@ -1417,7 +1415,7 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
             }
         }
 
-        if (b->bl != BL_8X8 || b->bp == PARTITION_NONE) {
+        if (b->bs <= BS_8x8) {
             if (s->segmentation.feat[b->seg_id].skip_enabled) {
                 b->mode[0] = b->mode[1] = b->mode[2] = b->mode[3] = ZEROMV;
             } else {
@@ -1453,7 +1451,7 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
             b->filter = s->filtermode;
         }
 
-        if (b->bl == BL_8X8 && b->bp == PARTITION_NONE) {
+        if (b->bs > BS_8x8) {
             // sub8x8 mode/mv coding
             // inter mode ctx = inter_mode_ctx_lut[a_mode][l_mode];
             printf("Inter sub8x8 mode/mv coding not yet done\n");
@@ -1500,8 +1498,8 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
     memset(&s->left_skip_ctx[row7], b->skip, h4);
     memset(&s->above_txfm_ctx[col], b->tx, w4);
     memset(&s->left_txfm_ctx[row7], b->tx, h4);
-    memset(&s->above_partition_ctx[col], above_ctx[b->bl][b->bp], w4);
-    memset(&s->left_partition_ctx[row7], left_ctx[b->bl][b->bp], h4);
+    memset(&s->above_partition_ctx[col], above_ctx[b->bs], w4);
+    memset(&s->left_partition_ctx[row7], left_ctx[b->bs], h4);
     if (!s->keyframe && !s->intraonly) {
         memset(&s->above_intra_ctx[col], b->intra, w4);
         memset(&s->left_intra_ctx[row7], b->intra, h4);
@@ -1667,8 +1665,7 @@ static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
     uint8_t (*p)[6][11] = s->prob.coef[b->tx][0 /* y */][!b->intra];
     unsigned (*c)[6][3] = s->counts.coef[b->tx][0 /* y */][!b->intra];
     unsigned (*e)[6][2] = s->counts.eob[b->tx][0 /* y */][!b->intra];
-    int w4 = bwh_tab[b->bl + 1][b->bp][0] << 1;
-    int h4 = bwh_tab[b->bl + 1][b->bp][1] << 1;
+    int w4 = bwh8_tab[b->bs][0] << 1, h4 = bwh8_tab[b->bs][1] << 1;
     int end_x = FFMIN(2 * (s->cols - col), w4);
     int end_y = FFMIN(2 * (s->rows - row), h4);
     int n, pl, x, y, step1d = 1 << b->tx, step = 1 << (b->tx * 2);
@@ -1702,7 +1699,7 @@ static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
     for (n = 0, y = 0; y < end_y; y += step1d) {
         for (x = 0; x < end_x; x += step1d, n += step) {
             enum TxfmType txtp = vp9_intra_txfm_type[b->mode[b->tx == TX_4X4 &&
-                                                             b->bl == BL_8X8 ?
+                                                             b->bs > BS_8x8 ?
                                                              n : 0]];
             int nnz = a[x] + l[y];
             if ((res = decode_coeffs_b(&s->c, s->block + 16 * n, 16 * step,
@@ -1898,8 +1895,8 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
                         ptrdiff_t yoff, ptrdiff_t uvoff)
 {
     VP9Context *s = ctx->priv_data;
-    int w4 = bwh_tab[b->bl + 1][b->bp][0] << 1, step1d = 1 << b->tx, n;
-    int h4 = bwh_tab[b->bl + 1][b->bp][1] << 1, x, y, step = 1 << (b->tx * 2);
+    int w4 = bwh8_tab[b->bs][0] << 1, step1d = 1 << b->tx, n;
+    int h4 = bwh8_tab[b->bs][1] << 1, x, y, step = 1 << (b->tx * 2);
     int end_x = FFMIN(2 * (s->cols - col), w4);
     int end_y = FFMIN(2 * (s->rows - row), h4);
     int tx = 4 * s->lossless + b->tx, uvtx = b->uvtx + 4 * s->lossless;
@@ -1912,7 +1909,7 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
     for (n = 0, y = 0; y < end_y; y += step1d) {
         uint8_t *ptr = dst;
         for (x = 0; x < end_x; x += step1d, ptr += 4 * step1d, n += step) {
-            int mode = b->mode[b->bl == BL_8X8 && b->tx == TX_4X4 ?
+            int mode = b->mode[b->bs > BS_8x8 && b->tx == TX_4X4 ?
                                y * 2 + x : 0];
             LOCAL_ALIGNED_16(uint8_t, a_buf, [48]);
             uint8_t *a = &a_buf[16], l[32];
@@ -1981,15 +1978,16 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
                         ptrdiff_t yoff, ptrdiff_t uvoff)
 {
     VP9Context *s = ctx->priv_data;
-    static const uint8_t bwl_fn_tab[5][4] = {
-        { 0, 0, 1 }, { 1, 1, 2 }, { 2, 2, 3 }, { 3, 3, 4, 4 }, { 4, 4, 4, 4 }
+    static const uint8_t bwlog_tab[2][N_BS_SIZES] = {
+        { 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4 },
+        { 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 4 },
     };
 
-    if (b->bl == BL_8X8 && b->bp != PARTITION_NONE) {
+    if (b->bs > BS_8x8) {
         printf("Sub8x8 inter prediction not yet implemented\n");
     } else {
         AVFrame *ref1 = s->refs[s->refidx[b->ref[0]]];
-        int bw = bwl_fn_tab[b->bl][b->bp], bh = bwh_tab[b->bl][b->bp][1];
+        int bw = bwlog_tab[0][b->bs], bh = bwh4_tab[b->bs][1] * 4;
 
         // y inter pred
         mc_luma_dir(s->dsp.mc[bw][b->filter][0],
@@ -2088,19 +2086,16 @@ static av_always_inline void mask_edges(struct VP9Filter *lflvl, int is_uv,
     }
 }
 
-// FIXME maybe merge bl/bp into a single argument from this point onwards,
-// since we never use them separately above/in this function, only below
-// (in decode_sb())
 static int decode_b(AVCodecContext *ctx, int row, int col,
                     struct VP9Filter *lflvl, ptrdiff_t yoff, ptrdiff_t uvoff,
                     enum BlockLevel bl, enum BlockPartition bp)
 {
     VP9Context *s = ctx->priv_data;
+    enum BlockSize bs = bl * 3 + bp;
     VP9Block b;
-    int res, y, w4 = bwh_tab[bl + 1][bp][0], h4 = bwh_tab[bl + 1][bp][1], lvl;
+    int res, y, w4 = bwh8_tab[bs][0], h4 = bwh8_tab[bs][1], lvl;
 
-    b.bl = bl;
-    b.bp = bp;
+    b.bs = bs;
     if ((res = decode_mode(ctx, row, col, &b)) < 0)
         return res;
     b.uvtx = b.tx - (w4 * 2 == (1 << b.tx) || h4 * 2 == (1 << b.tx));
