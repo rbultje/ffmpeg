@@ -71,7 +71,6 @@ struct VP9Filter {
 };
 
 typedef struct VP9Context {
-    int nr;
     VP9DSPContext dsp;
     VideoDSPContext vdsp;
     GetBitContext gb;
@@ -2939,7 +2938,6 @@ static int vp9_decode_init(AVCodecContext *ctx)
     VP9Context *s = ctx->priv_data;
     int i;
 
-    s->nr = 0;
     ctx->pix_fmt = AV_PIX_FMT_YUV420P;
     ff_vp9dsp_init(&s->dsp);
     ff_videodsp_init(&s->vdsp, 8);
