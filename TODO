@@ -26,4 +26,5 @@ vp9:
 - add >1 frames to all fate tests
 - fate tests for resolution changing, tiling (row/col), the weird UV loopfilter
   hack to use 8x8 lf for 16x16 on odd col/row image size edges
+- put boolcoder on stack of coeff decoder or mode decoder (see vp8/h264)
 
