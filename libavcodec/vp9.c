@@ -787,7 +787,7 @@ static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
 
 #define RETURN_MV(mv) \
     do { \
-        uint32_t m = AV_RN32(&mv); \
+        uint32_t m = AV_RN32A(&mv); \
         if (m != INVALID_MV) { \
             if (!idx) { \
                 AV_WN32A(pmv, m); \
@@ -1537,14 +1537,14 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
             for (x = 0; x < w4; x++) {
                 s->mv[0][o + x].ref[0] = b->ref[0];
                 s->mv[0][o + x].ref[1] = b->ref[1];
-                AV_WN32A(&s->mv[0][o + x].mv[0], AV_RN32A(&b->mv[0][0]));
-                AV_WN32A(&s->mv[0][o + x].mv[1], AV_RN32A(&b->mv[0][1]));
+                AV_COPY32(&s->mv[0][o + x].mv[0], &b->mv[0][0]);
+                AV_COPY32(&s->mv[0][o + x].mv[1], &b->mv[0][1]);
             }
         } else {
             for (x = 0; x < w4; x++) {
                 s->mv[0][o + x].ref[0] = b->ref[0];
                 s->mv[0][o + x].ref[1] = -1;
-                AV_WN32A(&s->mv[0][o + x].mv[0], AV_RN32A(&b->mv[0][0]));
+                AV_COPY32(&s->mv[0][o + x].mv[0], &b->mv[0][0]);
             }
         }
     }
