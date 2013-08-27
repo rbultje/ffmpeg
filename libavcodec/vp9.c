@@ -496,9 +496,17 @@ static int decode_frame_header(AVCodecContext *ctx,
         } else {
             lflvl  = s->filter.level;
         }
-        s->segmentation.feat[i].lflvl[0][0] = s->segmentation.feat[i].lflvl[1][0] =
+        s->segmentation.feat[i].lflvl[0][0] =
+        s->segmentation.feat[i].lflvl[0][1] =
             av_clip_uintp2(lflvl + (s->lf_delta.ref[0] << sh), 6);
-        // FIXME inter mode loopfilter deltas
+        for (j = 1; j < 4; j++) {
+            s->segmentation.feat[i].lflvl[j][0] =
+                av_clip_uintp2(lflvl + ((s->lf_delta.ref[j] +
+                                         s->lf_delta.mode[0]) << sh), 6);
+            s->segmentation.feat[i].lflvl[j][1] =
+                av_clip_uintp2(lflvl + ((s->lf_delta.ref[j] +
+                                         s->lf_delta.mode[1]) << sh), 6);
+        }
     }
 
     /* tiling info */
@@ -2384,7 +2392,8 @@ static int decode_b(AVCodecContext *ctx, int row, int col,
 
     // pick filter level and find edges to apply filter to
     if (s->filter.level &&
-        (lvl = s->segmentation.feat[b.seg_id].lflvl[0][0]) > 0) {
+        (lvl = s->segmentation.feat[b.seg_id].lflvl[b.intra ? 0 : b.ref[0] + 1]
+                                                   [b.mode[3] != ZEROMV]) > 0) {
         int x_end = FFMIN(s->cols - col, w4), y_end = FFMIN(s->rows - row, h4);
 
         for (y = 0; y < h4; y++)
