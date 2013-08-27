@@ -2293,7 +2293,7 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
 static av_always_inline void mask_edges(struct VP9Filter *lflvl, int is_uv,
                                         int row_and_7, int col_and_7,
                                         int w, int h, int col_end,
-                                        enum TxfmMode tx)
+                                        enum TxfmMode tx, int skip_inter)
 {
     // FIXME for inter blocks, also skip loopfilter across edges inside a
     // predictor block if we're a skipblock (i.e. no coefficients)
@@ -2348,12 +2348,20 @@ static av_always_inline void mask_edges(struct VP9Filter *lflvl, int is_uv,
     } else {
         static const unsigned masks[4] = { 0xff, 0x55, 0x11, 0x01 };
         int l2 = tx + is_uv - 1, step1d = 1 << l2, mask_id = (tx == TX_8X8), y;
-        int t = 1 << col_and_7, m_col = (t << w) - t, m_row = m_col & masks[l2];
+        int t = 1 << col_and_7, m_col = (t << w) - t;
 
-        for (y = row_and_7; y < h + row_and_7; y++)
-            lflvl->mask[is_uv][0][y][mask_id] |= m_row;
-        for (y = row_and_7; y < h + row_and_7; y += step1d)
-            lflvl->mask[is_uv][1][y][mask_id] |= m_col;
+        if (!skip_inter) {
+            int m_row = m_col & masks[l2];
+
+            for (y = row_and_7; y < h + row_and_7; y++)
+                lflvl->mask[is_uv][0][y][mask_id] |= m_row;
+            for (y = row_and_7; y < h + row_and_7; y += step1d)
+                lflvl->mask[is_uv][1][y][mask_id] |= m_col;
+        } else {
+            for (y = row_and_7; y < h + row_and_7; y++)
+                lflvl->mask[is_uv][0][y][mask_id] |= t;
+            lflvl->mask[is_uv][1][row_and_7][mask_id] |= m_col;
+        }
     }
 }
 
@@ -2395,12 +2403,14 @@ static int decode_b(AVCodecContext *ctx, int row, int col,
         (lvl = s->segmentation.feat[b.seg_id].lflvl[b.intra ? 0 : b.ref[0] + 1]
                                                    [b.mode[3] != ZEROMV]) > 0) {
         int x_end = FFMIN(s->cols - col, w4), y_end = FFMIN(s->rows - row, h4);
+        int skip_inter = !b.intra && b.skip;
 
         for (y = 0; y < h4; y++)
             memset(&lflvl->level[((row & 7) + y) * 8 + (col & 7)], lvl, w4);
-        mask_edges(lflvl, 0, row & 7, col & 7, x_end, y_end, 0, b.tx);
+        mask_edges(lflvl, 0, row & 7, col & 7, x_end, y_end, 0, b.tx, skip_inter);
         mask_edges(lflvl, 1, row & 7, col & 7, x_end, y_end,
-                   s->cols & 1 && col + w4 >= s->cols ? s->cols & 7 : 0, b.uvtx);
+                   s->cols & 1 && col + w4 >= s->cols ? s->cols & 7 : 0, b.uvtx,
+                   skip_inter);
 
         if (!s->filter.lim_lut[lvl]) {
             int sharp = s->filter.sharpness;
