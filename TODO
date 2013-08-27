@@ -1,5 +1,4 @@
 vp9:
-- inter mode loopfilter deltas, inter skip loopfilter handling
 - try to replace the ugly ref frame context (for bitstream parsing) with
   some kind of LUT
 - inter uv pred

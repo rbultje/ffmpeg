@@ -963,11 +963,28 @@ static void fill_mv(VP9Context *s, VP9Block *b, int row, int col,
     if (mode == ZEROMV) {
         memset(mv, 0, sizeof(*mv) * 2);
     } else {
+        int hp;
+
         // FIXME cache this value and reuse for other subblocks
         find_ref_mvs(s, b, row, col, &mv[0], b->ref[0], 0, mode == NEARMV,
                      mode == NEWMV ? -1 : sb);
+        // FIXME maybe move this code into find_ref_mvs()
+        if ((mode == NEWMV || sb == -1) &&
+            !(hp = s->highprecisionmvs && abs(mv[0].x) < 64 && abs(mv[0].y) < 64)) {
+            if (mv[0].y & 1) {
+                if (mv[0].y < 0)
+                    mv[0].y++;
+                else
+                    mv[0].y--;
+            }
+            if (mv[0].x & 1) {
+                if (mv[0].x < 0)
+                    mv[0].x++;
+                else
+                    mv[0].x--;
+            }
+        }
         if (mode == NEWMV) {
-            int hp = s->highprecisionmvs && abs(mv[0].x) < 64 && abs(mv[0].y) < 64;
             enum MVJoint j = vp8_rac_get_tree(&s->c, vp9_mv_joint_tree,
                                               s->prob.p.mv_joint);
 
@@ -982,8 +999,22 @@ static void fill_mv(VP9Context *s, VP9Block *b, int row, int col,
             // FIXME cache this value and reuse for other subblocks
             find_ref_mvs(s, b, row, col, &mv[1], b->ref[1], 1, mode == NEARMV,
                          mode == NEWMV ? -1 : sb);
+            if ((mode == NEWMV || sb == -1) &&
+                !(hp = s->highprecisionmvs && abs(mv[1].x) < 64 && abs(mv[1].y) < 64)) {
+                if (mv[1].y & 1) {
+                    if (mv[1].y < 0)
+                        mv[1].y++;
+                    else
+                        mv[1].y--;
+                }
+                if (mv[1].x & 1) {
+                    if (mv[1].x < 0)
+                        mv[1].x++;
+                    else
+                        mv[1].x--;
+                }
+            }
             if (mode == NEWMV) {
-                int hp = s->highprecisionmvs && abs(mv[1].x) < 64 && abs(mv[1].y) < 64;
                 enum MVJoint j = vp8_rac_get_tree(&s->c, vp9_mv_joint_tree,
                                                   s->prob.p.mv_joint);
 
@@ -2295,15 +2326,12 @@ static av_always_inline void mask_edges(struct VP9Filter *lflvl, int is_uv,
                                         int w, int h, int col_end,
                                         enum TxfmMode tx, int skip_inter)
 {
-    // FIXME for inter blocks, also skip loopfilter across edges inside a
-    // predictor block if we're a skipblock (i.e. no coefficients)
-
     // FIXME I'm pretty sure all loops can be replaced by a single LUT if
     // we make VP9Filter.mask uint64_t (i.e. row/col all single variable)
     // and make the LUT 5-indexed (bl, bp, is_uv, tx and row/col), and then
     // use row_and_7/col_and_7 as shifts (1*col_and_7+8*row_and_7)
 
-    if (tx == TX_4X4) {
+    if (tx == TX_4X4 && !skip_inter) {
         int t = 1 << col_and_7, m_col = (t << w) - t, y;
         int m_col_odd = (t << (w - 1)) - t;
 
@@ -2346,21 +2374,40 @@ static av_always_inline void mask_edges(struct VP9Filter *lflvl, int is_uv,
             }
         }
     } else {
-        static const unsigned masks[4] = { 0xff, 0x55, 0x11, 0x01 };
-        int l2 = tx + is_uv - 1, step1d = 1 << l2, mask_id = (tx == TX_8X8), y;
-        int t = 1 << col_and_7, m_col = (t << w) - t;
+        int y, t = 1 << col_and_7, m_col = (t << w) - t;
 
         if (!skip_inter) {
+            int mask_id = (tx == TX_8X8);
+            int l2 = tx + is_uv - 1, step1d = 1 << l2;
+            static const unsigned masks[4] = { 0xff, 0x55, 0x11, 0x01 };
             int m_row = m_col & masks[l2];
 
             for (y = row_and_7; y < h + row_and_7; y++)
                 lflvl->mask[is_uv][0][y][mask_id] |= m_row;
             for (y = row_and_7; y < h + row_and_7; y += step1d)
                 lflvl->mask[is_uv][1][y][mask_id] |= m_col;
-        } else {
+        } else if (tx != TX_4X4) {
+            int mask_id = (tx == TX_8X8);
+
             for (y = row_and_7; y < h + row_and_7; y++)
                 lflvl->mask[is_uv][0][y][mask_id] |= t;
             lflvl->mask[is_uv][1][row_and_7][mask_id] |= m_col;
+        } else if (is_uv) {
+            int t8 = t & 0x01, t4 = t - t8;
+
+            for (y = row_and_7; y < h + row_and_7; y++) {
+                lflvl->mask[is_uv][0][y][2] |= t4;
+                lflvl->mask[is_uv][0][y][1] |= t8;
+            }
+            lflvl->mask[is_uv][1][row_and_7][2 - !(row_and_7 & 7)] |= m_col;
+        } else {
+            int t8 = t & 0x11, t4 = t - t8;
+
+            for (y = row_and_7; y < h + row_and_7; y++) {
+                lflvl->mask[is_uv][0][y][2] |= t4;
+                lflvl->mask[is_uv][0][y][1] |= t8;
+            }
+            lflvl->mask[is_uv][1][row_and_7][2 - !(row_and_7 & 3)] |= m_col;
         }
     }
 }
