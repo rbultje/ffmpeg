@@ -2088,6 +2088,7 @@ static av_always_inline void mc_luma_dir(VP9Context *s, vp9_mc_func (*mc)[2],
     ref += y * ref_stride + x;
     mx &= 7;
     my &= 7;
+    // FIXME bilinear filter only needs 0/1 pixels, not 3/4
     if (x < !!mx * 3 || y < !!my * 3 ||
         x + !!mx * 4 > w - bw || y + !!my * 4 > h - bh) {
         s->vdsp.emulated_edge_mc(s->edge_emu_buffer,
