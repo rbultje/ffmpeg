@@ -855,6 +855,7 @@ static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
         }
     }
 
+    // FIXME clamp ref mv to legal edge
 #define RETURN_SCALE_MV(mv, scale) \
     do { \
         if (scale) { \
