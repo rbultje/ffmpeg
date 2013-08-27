@@ -2,9 +2,7 @@ vp9:
 - inter mode loopfilter deltas, inter skip loopfilter handling
 - try to replace the ugly ref frame context (for bitstream parsing) with
   some kind of LUT
-- sub8x8 mv/mode parsing and sub8x8 y inter pred
-- inter itxfm_add
-- inter uv pred/itxfm_add
+- inter uv pred
 - prefetch magic
 - remove all memsets in context setting (above/left) and replace with faster
   versions that understand we're only ever writing 1,2,4,8,16 bytes.
@@ -17,7 +15,6 @@ vp9:
   next line); write a fate test to regtest this (e.g. 65x65 image with using
   64x32 for bottomleft sb64 and 32x64 for topright sb64; use the tx32x32 to
   trigger this in itxfm_add as well as prediction.
-- emu_edge in inter prediction
 - replace loopfilter masking logic with uint64_t LUTs
 - maybe add itxfm_add_blk variants for inter (to do multiple 4x4 per time)
 - x86 simd
