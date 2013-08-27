@@ -2222,15 +2222,50 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
     }
 
     if (!b->skip) {
-        // y itxfm_add
-        printf("Inter itxfm add loop not yet implemented\n");
+        /* mostly copied intra_reconn() */
+
+        int w4 = bwh_tab[1][b->bs][0] << 1, step1d = 1 << b->tx, n;
+        int h4 = bwh_tab[1][b->bs][1] << 1, x, y, step = 1 << (b->tx * 2);
+        int end_x = FFMIN(2 * (s->cols - col), w4);
+        int end_y = FFMIN(2 * (s->rows - row), h4);
+        int tx = 4 * s->lossless + b->tx, uvtx = b->uvtx + 4 * s->lossless;
+        int uvstep1d = 1 << b->uvtx, p;
+        uint8_t *dst = s->f->data[0] + yoff;
+
+        // y itxfm add
+        for (n = 0, y = 0; y < end_y; y += step1d) {
+            uint8_t *ptr = dst;
+            for (x = 0; x < end_x; x += step1d, ptr += 4 * step1d, n += step) {
+                int eob = b->tx > TX_8X8 ? AV_RN16A(&s->eob[n]) : s->eob[n];
+
+                if (eob)
+                    s->dsp.itxfm_add[tx][DCT_DCT](ptr, s->f->linesize[0],
+                                                  s->block + 16 * n, eob);
+            }
+            dst += 4 * s->f->linesize[0] * step1d;
+        }
+
+        // uv itxfm add
+        h4 >>= 1;
+        w4 >>= 1;
+        end_x >>= 1;
+        end_y >>= 1;
+        step = 1 << (b->uvtx * 2);
+        for (p = 0; p < 2; p++) {
+            dst = s->f->data[1 + p] + uvoff;
+            for (n = 0, y = 0; y < end_y; y += uvstep1d) {
+                uint8_t *ptr = dst;
+                for (x = 0; x < end_x; x += uvstep1d, ptr += 4 * uvstep1d, n += step) {
+                    int eob = b->uvtx > TX_8X8 ? AV_RN16A(&s->uveob[p][n]) : s->uveob[p][n];
+
+                    if (eob)
+                        s->dsp.itxfm_add[uvtx][DCT_DCT](ptr, s->f->linesize[1],
+                                                        s->uvblock[p] + 16 * n, eob);
+                }
+                dst += 4 * uvstep1d * s->f->linesize[1];
+            }
+        }
     }
-
-    // uv inter pred
-
-    // uv itxfm add
-
-    printf("UV inter recon not yet implemented\n");
 }
 
 static av_always_inline void mask_edges(struct VP9Filter *lflvl, int is_uv,
