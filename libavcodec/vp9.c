@@ -888,7 +888,7 @@ static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
                 RETURN_SCALE_MV(mv->mv[0], s->signbias[mv->ref[0]] != s->signbias[ref]);
             }
             if (mv->ref[1] != ref && mv->ref[1] >= 0) {
-                RETURN_SCALE_MV(mv->mv[1], s->signbias[mv->ref[0]] != s->signbias[ref]);
+                RETURN_SCALE_MV(mv->mv[1], s->signbias[mv->ref[1]] != s->signbias[ref]);
             }
         }
     }
@@ -901,7 +901,7 @@ static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
             RETURN_SCALE_MV(mv->mv[0], s->signbias[mv->ref[0]] != s->signbias[ref]);
         }
         if (mv->ref[1] != ref && mv->ref[1]) {
-            RETURN_SCALE_MV(mv->mv[1], s->signbias[mv->ref[0]] != s->signbias[ref]);
+            RETURN_SCALE_MV(mv->mv[1], s->signbias[mv->ref[1]] != s->signbias[ref]);
         }
     }
 
