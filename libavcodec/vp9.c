@@ -2981,10 +2981,12 @@ static void adapt_probs(VP9Context *s)
         adapt_prob(&pp[1], c[1], c[2] + c[3], 20, 128);
         adapt_prob(&pp[2], c[2], c[3], 20, 128);
 
-        adapt_prob(&p->mv_comp[i].class0_hp, s->counts.mv_comp[i].class0_hp[0],
-                   s->counts.mv_comp[i].class0_hp[1], 20, 128);
-        adapt_prob(&p->mv_comp[i].hp, s->counts.mv_comp[i].hp[0],
-                   s->counts.mv_comp[i].hp[1], 20, 128);
+        if (s->highprecisionmvs) {
+            adapt_prob(&p->mv_comp[i].class0_hp, s->counts.mv_comp[i].class0_hp[0],
+                       s->counts.mv_comp[i].class0_hp[1], 20, 128);
+            adapt_prob(&p->mv_comp[i].hp, s->counts.mv_comp[i].hp[0],
+                       s->counts.mv_comp[i].hp[1], 20, 128);
+        }
     }
 
     // y intra modes
@@ -3239,8 +3241,10 @@ static int vp9_decode_packet(AVCodecContext *avctx, void *out_pic,
     if ((marker & 0xe0) == 0xc0) {
         int nbytes = 1 + ((marker >> 3) & 0x3);
         int n_frames = 1 + (marker & 0x7), idx_sz = 2 + n_frames * nbytes;
+
         if (size >= idx_sz && data[size - idx_sz] == marker) {
             const uint8_t *idx = data + size + 1 - idx_sz;
+            // FIXME this doesn't protect against out-of-bounds reads
             switch (nbytes) {
 #define case_n(a, rd) \
                 case a: \
