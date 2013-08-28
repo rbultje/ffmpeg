@@ -686,8 +686,8 @@ static int decode_frame_header(AVCodecContext *ctx,
             for (j = 0; j < 4; j++)
                 for (k = 0; k < 3; k++)
                     if (vp56_rac_get_prob_branchy(&s->c, 252))
-                        s->prob.p.partition[i][j][k] =
-                            update_prob(&s->c, s->prob.p.partition[i][j][k]);
+                        s->prob.p.partition[3 - i][j][k] =
+                            update_prob(&s->c, s->prob.p.partition[3 - i][j][k]);
 
         // mv fields don't use the update_prob subexp model for some reason
         for (i = 0; i < 3; i++)
@@ -1408,12 +1408,12 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
                                 c = 1 + (!s->fixcompref || !s->left_ref_ctx[row7] ||
                                          !s->above_ref_ctx[col]);
                             } else {
-                                c = (1 + 2 * !s->above_ref_ctx[col]) *
-                                (!s->fixcompref || !s->left_ref_ctx[row7]);
+                                c = (3 * !s->above_ref_ctx[col]) +
+                                    (!s->fixcompref || !s->left_ref_ctx[row7]);
                             }
                         } else if (s->above_comp_ctx[col]) {
-                            c = (1 + 2 * !s->left_ref_ctx[row7]) *
-                            (!s->fixcompref || !s->above_ref_ctx[col]);
+                            c = (3 * !s->left_ref_ctx[row7]) +
+                                (!s->fixcompref || !s->above_ref_ctx[col]);
                         } else {
                             c = 2 * !s->left_ref_ctx[row7] + 2 * !s->above_ref_ctx[col];
                         }
@@ -2149,7 +2149,7 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
         { 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 4 },
     };
     AVFrame *ref1 = s->refs[s->refidx[b->ref[0]]];
-    AVFrame *ref2 = b->comp ? s->refs[s->refidx[b->ref[0]]] : NULL;
+    AVFrame *ref2 = b->comp ? s->refs[s->refidx[b->ref[1]]] : NULL;
 
     // y inter pred
     if (b->bs > BS_8x8) {
@@ -3208,6 +3208,7 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
             adapt_probs(s);
         }
     }
+    FFSWAP(struct mv_storage *, s->mv[0], s->mv[1]);
 
     // ref frame setup
     for (i = 0; i < 8; i++)
@@ -3253,9 +3254,9 @@ static int vp9_decode_packet(AVCodecContext *avctx, void *out_pic,
                     } \
                     break;
                 case_n(1, *idx);
-                case_n(2, AV_RB16(idx));
-                case_n(3, AV_RB24(idx));
-                case_n(4, AV_RB32(idx));
+                case_n(2, AV_RL16(idx));
+                case_n(3, AV_RL24(idx));
+                case_n(4, AV_RL32(idx));
             }
             return size;
         }
