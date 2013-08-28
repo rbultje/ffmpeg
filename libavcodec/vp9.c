@@ -2249,24 +2249,24 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
             if (b->comp) {
                 mc_luma_dir(s, s->dsp.mc[4][b->filter][1],
                             s->f->data[0], s->f->linesize[0], yoff,
-                            ref1->data[0], ref1->linesize[0],
+                            ref2->data[0], ref2->linesize[0],
                             row << 3, col << 3, &b->mv[0][1],
                             4, 4, s->cols << 3, s->rows << 3);
                 mc_luma_dir(s, s->dsp.mc[4][b->filter][1],
                             s->f->data[0] + 4, s->f->linesize[0], yoff,
-                            ref1->data[0], ref1->linesize[0],
+                            ref2->data[0], ref2->linesize[0],
                             row << 3, (col << 3) + 4, &b->mv[1][1],
                             4, 4, s->cols << 3, s->rows << 3);
                 mc_luma_dir(s, s->dsp.mc[4][b->filter][1],
                             s->f->data[0] + 4 * s->f->linesize[0],
                             s->f->linesize[0], yoff,
-                            ref1->data[0], ref1->linesize[0],
+                            ref2->data[0], ref2->linesize[0],
                             (row << 3) + 4, col << 3, &b->mv[2][1],
                             4, 4, s->cols << 3, s->rows << 3);
                 mc_luma_dir(s, s->dsp.mc[3][b->filter][1],
                             s->f->data[0] + 4 * s->f->linesize[0] + 4,
                             s->f->linesize[0], yoff,
-                            ref1->data[0], ref1->linesize[0],
+                            ref2->data[0], ref2->linesize[0],
                             (row << 3) + 4, (col << 3) + 4, &b->mv[3][1],
                             4, 4, s->cols << 3, s->rows << 3);
             }
