@@ -937,6 +937,9 @@ static av_always_inline int read_mv_component(VP9Context *s, int idx, int hp)
             n |= bit;
         } else {
             n |= 1;
+            // bug in libvpx - we count for bw entropy purposes even if the
+            // bit wasn't coded
+            s->counts.mv_comp[idx].hp[1]++;
         }
         n += 8 << c;
     } else {
@@ -952,6 +955,9 @@ static av_always_inline int read_mv_component(VP9Context *s, int idx, int hp)
             n |= bit;
         } else {
             n |= 1;
+            // bug in libvpx - we count for bw entropy purposes even if the
+            // bit wasn't coded
+            s->counts.mv_comp[idx].class0_hp[1]++;
         }
     }
 
