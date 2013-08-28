@@ -874,7 +874,6 @@ static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
         }
     }
 
-    // FIXME clamp ref mv to legal edge
 #define RETURN_SCALE_MV(mv, scale) \
     do { \
         if (scale) { \
@@ -3255,18 +3254,20 @@ static int vp9_decode_packet(AVCodecContext *avctx, void *out_pic,
 
         if (size >= idx_sz && data[size - idx_sz] == marker) {
             const uint8_t *idx = data + size + 1 - idx_sz;
-            // FIXME this doesn't protect against out-of-bounds reads
             switch (nbytes) {
 #define case_n(a, rd) \
                 case a: \
                     while (n_frames--) { \
                         int sz = rd; \
                         idx += a; \
+                        if (sz > size) \
+                            return AVERROR_INVALIDDATA; \
                         res = vp9_decode_frame(avctx, out_pic, got_frame, \
                                                data, sz); \
                         if (res < 0) \
                             return res; \
                         data += sz; \
+                        size -= sz; \
                     } \
                     break;
                 case_n(1, *idx);
