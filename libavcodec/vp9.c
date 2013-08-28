@@ -2130,7 +2130,7 @@ typedef void (*vp9_mc_func)(uint8_t *dst, const uint8_t *ref,
 static av_always_inline void mc_luma_dir(VP9Context *s, vp9_mc_func (*mc)[2],
                                          uint8_t *dst, ptrdiff_t off,
                                          const uint8_t *ref, ptrdiff_t stride,
-                                         ptrdiff_t y, ptrdiff_t x, VP56mv *mv,
+                                         ptrdiff_t y, ptrdiff_t x, const VP56mv *mv,
                                          int bw, int bh, int w, int h)
 {
     int mx = mv->x, my = mv->y;
@@ -2150,6 +2150,43 @@ static av_always_inline void mc_luma_dir(VP9Context *s, vp9_mc_func (*mc)[2],
         ref = s->edge_emu_buffer + !!my * 3 * stride + !!mx * 3;
     }
     mc[!!mx][!!my](dst + off, ref, stride, bh, mx << 1, my << 1);
+}
+
+static av_always_inline void mc_chroma_dir(VP9Context *s, vp9_mc_func (*mc)[2],
+                                           uint8_t *dst_u, uint8_t *dst_v, ptrdiff_t off,
+                                           const uint8_t *ref_u, ptrdiff_t stride_u,
+                                           const uint8_t *ref_v, ptrdiff_t stride_v,
+                                           ptrdiff_t y, ptrdiff_t x, const VP56mv *mv,
+                                           int bw, int bh, int w, int h)
+{
+    int mx = mv->x, my = mv->y;
+
+    y += my >> 4;
+    x += mx >> 4;
+    ref_u += y * stride_u + x;
+    ref_v += y * stride_v + x;
+    mx &= 15;
+    my &= 15;
+    // FIXME bilinear filter only needs 0/1 pixels, not 3/4
+    if (x < !!mx * 3 || y < !!my * 3 ||
+        x + !!mx * 4 > w - bw || y + !!my * 4 > h - bh) {
+        s->vdsp.emulated_edge_mc(s->edge_emu_buffer,
+                                 ref_u - !!my * 3 * stride_u - !!mx * 3, stride_u,
+                                 bw + !!mx * 7, bh + !!my * 7,
+                                 x - !!mx * 3, y - !!my * 3, w, h);
+        ref_u = s->edge_emu_buffer + !!my * 3 * stride_u + !!mx * 3;
+        mc[!!mx][!!my](dst_u + off, ref_u, stride_u, bh, mx, my);
+
+        s->vdsp.emulated_edge_mc(s->edge_emu_buffer,
+                                 ref_v - !!my * 3 * stride_v - !!mx * 3, stride_v,
+                                 bw + !!mx * 7, bh + !!my * 7,
+                                 x - !!mx * 3, y - !!my * 3, w, h);
+        ref_v = s->edge_emu_buffer + !!my * 3 * stride_v + !!mx * 3;
+        mc[!!mx][!!my](dst_v + off, ref_v, stride_v, bh, mx, my);
+    } else {
+        mc[!!mx][!!my](dst_u + off, ref_u, stride_u, bh, mx, my);
+        mc[!!mx][!!my](dst_v + off, ref_v, stride_v, bh, mx, my);
+    }
 }
 
 static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
@@ -2266,6 +2303,42 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
                         yoff, ref2->data[0], ref2->linesize[0],
                         row << 3, col << 3, &b->mv[0][1],
                         bw, bh, s->cols << 3, s->rows << 3);
+    }
+
+    // uv inter pred
+    {
+        int bwl = bwlog_tab[1][b->bs];
+        int bw = bwh_tab[1][b->bs][0] * 4, bh = bwh_tab[1][b->bs][1] * 4;
+        VP56mv mvuv;
+
+        if (b->bs > BS_8x8) {
+            mvuv.x = ROUNDED_DIV(b->mv[0][0].x + b->mv[1][0].x + b->mv[2][0].x + b->mv[3][0].x, 4);
+            mvuv.y = ROUNDED_DIV(b->mv[0][0].y + b->mv[1][0].y + b->mv[2][0].y + b->mv[3][0].y, 4);
+        } else {
+            mvuv = b->mv[0][0];
+        }
+
+        mc_chroma_dir(s, s->dsp.mc[bwl][b->filter][0],
+                      s->f->data[1], s->f->data[2], uvoff,
+                      ref1->data[1], ref1->linesize[1],
+                      ref1->data[2], ref1->linesize[2],
+                      row << 2, col << 2, &mvuv,
+                      bw, bh, s->cols << 2, s->rows << 2);
+
+        if (b->comp) {
+            if (b->bs > BS_8x8) {
+                mvuv.x = ROUNDED_DIV(b->mv[0][1].x + b->mv[1][1].x + b->mv[2][1].x + b->mv[3][1].x, 4);
+                mvuv.y = ROUNDED_DIV(b->mv[0][1].y + b->mv[1][1].y + b->mv[2][1].y + b->mv[3][1].y, 4);
+            } else {
+                mvuv = b->mv[0][1];
+            }
+            mc_chroma_dir(s, s->dsp.mc[bwl][b->filter][1],
+                          s->f->data[1], s->f->data[2], uvoff,
+                          ref2->data[1], ref2->linesize[1],
+                          ref2->data[2], ref2->linesize[2],
+                          row << 2, col << 2, &mvuv,
+                          bw, bh, s->cols << 2, s->rows << 2);
+        }
     }
 
     if (!b->skip) {
