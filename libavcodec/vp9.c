@@ -2919,9 +2919,9 @@ static void adapt_probs(VP9Context *s)
         uint8_t *pp = p->mv_mode[i];
         unsigned *c = s->counts.mv_mode[i];
 
-        adapt_prob(&pp[0], c[0], c[1] + c[2] + c[3], 20, 128);
-        adapt_prob(&pp[1], c[1], c[2] + c[3], 20, 128);
-        adapt_prob(&pp[2], c[2], c[3], 20, 128);
+        adapt_prob(&pp[0], c[2], c[1] + c[0] + c[3], 20, 128);
+        adapt_prob(&pp[1], c[0], c[1] + c[3], 20, 128);
+        adapt_prob(&pp[2], c[1], c[3], 20, 128);
     }
 
     // mv joints
