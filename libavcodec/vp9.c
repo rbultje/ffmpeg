@@ -2834,7 +2834,6 @@ static void adapt_probs(VP9Context *s)
                         if (l == 0 && m >= 3) // dc only has 3 pt
                             break;
 
-                        DEBUGME=!i&&!j&&k==1&&!l&&!m;
                         adapt_prob(&pp[0], e[0], e[1], 24, uf);
                         adapt_prob(&pp[1], c[0], c[1] + c[2], 24, uf);
                         adapt_prob(&pp[2], c[1], c[2], 24, uf);
