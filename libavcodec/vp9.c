@@ -78,7 +78,7 @@ typedef struct VP9Context {
 
     // bitstream header
     unsigned profile:2;
-    unsigned keyframe:1;
+    unsigned keyframe:1, last_keyframe:1;
     unsigned invisible:1, last_invisible:1;
     unsigned use_last_frame_mvs:1;
     unsigned errorres:1;
@@ -319,6 +319,7 @@ static int decode_frame_header(AVCodecContext *ctx,
         printf("Directly show frame %d\n", ref);
         return -1;
     }
+    s->last_keyframe = s->keyframe;
     s->keyframe  = !get_bits1(&s->gb);
     s->last_invisible = s->invisible;
     s->invisible = !get_bits1(&s->gb);
@@ -2810,16 +2811,9 @@ static av_always_inline void adapt_prob(uint8_t *p, unsigned ct0, unsigned ct1,
 
 static void adapt_probs(VP9Context *s)
 {
-    int i, j, k, l, m, mc, uf;
+    int i, j, k, l, m;
     prob_context *p = &s->prob_ctx[s->framectxid].p;
-
-    if (s->keyframe || s->intraonly) {
-        mc = 24;
-        uf = 112;
-    } else {
-        mc = 20;
-        uf = 128;
-    }
+    int uf = (s->keyframe || s->intraonly || !s->last_keyframe) ? 112 : 128;
 
     // coefficients
     for (i = 0; i < 4; i++)
@@ -2834,9 +2828,10 @@ static void adapt_probs(VP9Context *s)
                         if (l == 0 && m >= 3) // dc only has 3 pt
                             break;
 
-                        adapt_prob(&pp[0], e[0], e[1], mc, uf);
-                        adapt_prob(&pp[1], c[0], c[1] + c[2], mc, uf);
-                        adapt_prob(&pp[2], c[1], c[2], mc, uf);
+                        DEBUGME=!i&&!j&&k==1&&!l&&!m;
+                        adapt_prob(&pp[0], e[0], e[1], 24, uf);
+                        adapt_prob(&pp[1], c[0], c[1] + c[2], 24, uf);
+                        adapt_prob(&pp[2], c[1], c[2], 24, uf);
                     }
 
     if (s->keyframe || s->intraonly) {
