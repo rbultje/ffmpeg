@@ -203,6 +203,7 @@ typedef struct VP9Context {
     uint8_t eob[256];
     DECLARE_ALIGNED(16, int16_t, uvblock)[2][1024];
     uint8_t uveob[2][64];
+    VP56mv min_mv, max_mv;
 } VP9Context;
 
 static int update_size(AVCodecContext *ctx, int w, int h)
@@ -760,6 +761,13 @@ static const uint8_t bwh_tab[2][N_BS_SIZES][2] = {
     }
 };
 
+static av_always_inline void clamp_mv(VP56mv *dst, const VP56mv *src,
+                                      VP9Context *s)
+{
+    dst->x = av_clip(src->x, s->min_mv.x, s->max_mv.x);
+    dst->y = av_clip(src->y, s->min_mv.y, s->max_mv.y);
+}
+
 static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
                          VP56mv *pmv, int ref, int z, int idx, int sb)
 {
@@ -800,12 +808,12 @@ static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
     do { \
         uint32_t m = AV_RN32A(&mv); \
         if (!idx) { \
-            AV_WN32A(pmv, m); \
+            clamp_mv(pmv, &mv, s); \
             return; \
         } else if (mem == INVALID_MV) { \
             mem = m; \
         } else if (m != mem) { \
-            AV_WN32A(pmv, m); \
+            clamp_mv(pmv, &mv, s); \
             return; \
         } \
     } while (0)
@@ -2428,6 +2436,10 @@ static int decode_b(AVCodecContext *ctx, int row, int col,
     VP9Block b;
     int res, y, w4 = bwh_tab[1][bs][0], h4 = bwh_tab[1][bs][1], lvl;
 
+    s->min_mv.x = -(128 + col * 64);
+    s->min_mv.y = -(128 + row * 64);
+    s->max_mv.x = 128 + (s->cols - col - w4) * 64;
+    s->max_mv.y = 128 + (s->rows - row - h4) * 64;
     b.bs = bs;
     if ((res = decode_mode(ctx, row, col, &b)) < 0)
         return res;
