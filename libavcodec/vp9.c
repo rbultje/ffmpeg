@@ -897,10 +897,10 @@ static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
     if (s->use_last_frame_mvs) {
         struct mv_storage *mv = &s->mv[1][row * s->sb_cols * 8 + col];
 
-        if (mv->ref[0] != ref && mv->ref[0]) {
+        if (mv->ref[0] != ref && mv->ref[0] >= 0) {
             RETURN_SCALE_MV(mv->mv[0], s->signbias[mv->ref[0]] != s->signbias[ref]);
         }
-        if (mv->ref[1] != ref && mv->ref[1]) {
+        if (mv->ref[1] != ref && mv->ref[1] >= 0) {
             RETURN_SCALE_MV(mv->mv[1], s->signbias[mv->ref[1]] != s->signbias[ref]);
         }
     }
