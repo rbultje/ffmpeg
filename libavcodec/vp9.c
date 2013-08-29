@@ -2124,14 +2124,12 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
     }
 }
 
-typedef void (*vp9_mc_func)(uint8_t *dst, ptrdiff_t dst_stride,
-                            const uint8_t *ref, ptrdiff_t ref_stride,
-                            int h, int mx, int my);
+typedef void (*vp9_mc_func)(uint8_t *dst, const uint8_t *ref,
+                            ptrdiff_t stride, int h, int mx, int my);
 
 static av_always_inline void mc_luma_dir(VP9Context *s, vp9_mc_func (*mc)[2],
-                                         uint8_t *dst, ptrdiff_t dst_stride,
-                                         ptrdiff_t off,
-                                         const uint8_t *ref, ptrdiff_t ref_stride,
+                                         uint8_t *dst, ptrdiff_t off,
+                                         const uint8_t *ref, ptrdiff_t stride,
                                          ptrdiff_t y, ptrdiff_t x, VP56mv *mv,
                                          int bw, int bh, int w, int h)
 {
@@ -2139,20 +2137,19 @@ static av_always_inline void mc_luma_dir(VP9Context *s, vp9_mc_func (*mc)[2],
 
     y += my >> 3;
     x += mx >> 3;
-    ref += y * ref_stride + x;
+    ref += y * stride + x;
     mx &= 7;
     my &= 7;
     // FIXME bilinear filter only needs 0/1 pixels, not 3/4
     if (x < !!mx * 3 || y < !!my * 3 ||
         x + !!mx * 4 > w - bw || y + !!my * 4 > h - bh) {
         s->vdsp.emulated_edge_mc(s->edge_emu_buffer,
-                                 ref - !!my * 3 * ref_stride - !!mx * 3,
-                                 ref_stride,
+                                 ref - !!my * 3 * stride - !!mx * 3, stride,
                                  bw + !!mx * 7, bh + !!my * 7,
                                  x - !!mx * 3, y - !!my * 3, w, h);
-        ref = s->edge_emu_buffer + !!my * 3 * ref_stride + !!mx * 3;
+        ref = s->edge_emu_buffer + !!my * 3 * stride + !!mx * 3;
     }
-    mc[!!mx][!!my](dst + off, dst_stride, ref, ref_stride, bh, mx << 1, my << 1);
+    mc[!!mx][!!my](dst + off, ref, stride, bh, mx << 1, my << 1);
 }
 
 static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
@@ -2169,104 +2166,88 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
     // y inter pred
     if (b->bs > BS_8x8) {
         if (b->bs == BS_8x4) {
-            mc_luma_dir(s, s->dsp.mc[3][b->filter][0],
-                        s->f->data[0], s->f->linesize[0], yoff,
-                        ref1->data[0], ref1->linesize[0],
+            mc_luma_dir(s, s->dsp.mc[3][b->filter][0], s->f->data[0],
+                        yoff, ref1->data[0], ref1->linesize[0],
                         row << 3, col << 3, &b->mv[0][0],
                         8, 4, s->cols << 3, s->rows << 3);
             mc_luma_dir(s, s->dsp.mc[3][b->filter][0],
-                        s->f->data[0] + 4 * s->f->linesize[0],
-                        s->f->linesize[0], yoff,
+                        s->f->data[0] + 4 * s->f->linesize[0], yoff,
                         ref1->data[0], ref1->linesize[0],
                         (row << 3) + 4, col << 3, &b->mv[2][0],
                         8, 4, s->cols << 3, s->rows << 3);
 
             if (b->comp) {
-                mc_luma_dir(s, s->dsp.mc[3][b->filter][1],
-                            s->f->data[0], s->f->linesize[0], yoff,
-                            ref2->data[0], ref2->linesize[0],
+                mc_luma_dir(s, s->dsp.mc[3][b->filter][1], s->f->data[0],
+                            yoff, ref2->data[0], ref2->linesize[0],
                             row << 3, col << 3, &b->mv[0][1],
                             8, 4, s->cols << 3, s->rows << 3);
-
                 mc_luma_dir(s, s->dsp.mc[3][b->filter][1],
-                            s->f->data[0] + 4 * s->f->linesize[0],
-                            s->f->linesize[0], yoff,
+                            s->f->data[0] + 4 * s->f->linesize[0], yoff,
                             ref2->data[0], ref2->linesize[0],
                             (row << 3) + 4, col << 3, &b->mv[2][1],
                             8, 4, s->cols << 3, s->rows << 3);
             }
         } else if (b->bs == BS_4x8) {
-            mc_luma_dir(s, s->dsp.mc[4][b->filter][0],
-                        s->f->data[0], s->f->linesize[0], yoff,
-                        ref1->data[0], ref1->linesize[0],
+            mc_luma_dir(s, s->dsp.mc[4][b->filter][0], s->f->data[0],
+                        yoff, ref1->data[0], ref1->linesize[0],
                         row << 3, col << 3, &b->mv[0][0],
                         4, 8, s->cols << 3, s->rows << 3);
-            mc_luma_dir(s, s->dsp.mc[4][b->filter][0],
-                        s->f->data[0] + 4, s->f->linesize[0], yoff,
-                        ref1->data[0], ref1->linesize[0],
+            mc_luma_dir(s, s->dsp.mc[4][b->filter][0], s->f->data[0] + 4,
+                        yoff, ref1->data[0], ref1->linesize[0],
                         row << 3, (col << 3) + 4, &b->mv[1][0],
                         4, 8, s->cols << 3, s->rows << 3);
 
             if (b->comp) {
-                mc_luma_dir(s, s->dsp.mc[4][b->filter][1],
-                            s->f->data[0], s->f->linesize[0], yoff,
-                            ref2->data[0], ref2->linesize[0],
+                mc_luma_dir(s, s->dsp.mc[4][b->filter][1], s->f->data[0],
+                            yoff, ref2->data[0], ref2->linesize[0],
                             row << 3, col << 3, &b->mv[0][1],
                             4, 8, s->cols << 3, s->rows << 3);
-
-                mc_luma_dir(s, s->dsp.mc[4][b->filter][1],
-                            s->f->data[0] + 4, s->f->linesize[0], yoff,
-                            ref2->data[0], ref2->linesize[0],
+                mc_luma_dir(s, s->dsp.mc[4][b->filter][1], s->f->data[0] + 4,
+                            yoff, ref2->data[0], ref2->linesize[0],
                             row << 3, (col << 3) + 4, &b->mv[1][1],
                             4, 8, s->cols << 3, s->rows << 3);
             }
         } else {
             assert(b->bs == BS_4x4);
 
-            mc_luma_dir(s, s->dsp.mc[4][b->filter][0],
-                        s->f->data[0], s->f->linesize[0], yoff,
-                        ref1->data[0], ref1->linesize[0],
+            // FIXME if two horizontally adjacent blocks have the same MV,
+            // do a w8 instead of a w4 call
+            mc_luma_dir(s, s->dsp.mc[4][b->filter][0], s->f->data[0],
+                        yoff, ref1->data[0], ref1->linesize[0],
                         row << 3, col << 3, &b->mv[0][0],
                         4, 4, s->cols << 3, s->rows << 3);
-            mc_luma_dir(s, s->dsp.mc[4][b->filter][0],
-                        s->f->data[0] + 4, s->f->linesize[0], yoff,
-                        ref1->data[0], ref1->linesize[0],
+            mc_luma_dir(s, s->dsp.mc[4][b->filter][0], s->f->data[0] + 4,
+                        yoff, ref1->data[0], ref1->linesize[0],
                         row << 3, (col << 3) + 4, &b->mv[1][0],
                         4, 4, s->cols << 3, s->rows << 3);
             mc_luma_dir(s, s->dsp.mc[4][b->filter][0],
                         s->f->data[0] + 4 * s->f->linesize[0],
-                        s->f->linesize[0], yoff,
-                        ref1->data[0], ref1->linesize[0],
+                        yoff, ref1->data[0], ref1->linesize[0],
                         (row << 3) + 4, col << 3, &b->mv[2][0],
                         4, 4, s->cols << 3, s->rows << 3);
             mc_luma_dir(s, s->dsp.mc[3][b->filter][0],
                         s->f->data[0] + 4 * s->f->linesize[0] + 4,
-                        s->f->linesize[0], yoff,
-                        ref1->data[0], ref1->linesize[0],
+                        yoff, ref1->data[0], ref1->linesize[0],
                         (row << 3) + 4, (col << 3) + 4, &b->mv[3][0],
                         4, 4, s->cols << 3, s->rows << 3);
 
             if (b->comp) {
-                mc_luma_dir(s, s->dsp.mc[4][b->filter][1],
-                            s->f->data[0], s->f->linesize[0], yoff,
-                            ref2->data[0], ref2->linesize[0],
+                mc_luma_dir(s, s->dsp.mc[4][b->filter][1], s->f->data[0],
+                            yoff, ref2->data[0], ref2->linesize[0],
                             row << 3, col << 3, &b->mv[0][1],
                             4, 4, s->cols << 3, s->rows << 3);
-                mc_luma_dir(s, s->dsp.mc[4][b->filter][1],
-                            s->f->data[0] + 4, s->f->linesize[0], yoff,
-                            ref2->data[0], ref2->linesize[0],
+                mc_luma_dir(s, s->dsp.mc[4][b->filter][1], s->f->data[0] + 4,
+                            yoff, ref2->data[0], ref2->linesize[0],
                             row << 3, (col << 3) + 4, &b->mv[1][1],
                             4, 4, s->cols << 3, s->rows << 3);
                 mc_luma_dir(s, s->dsp.mc[4][b->filter][1],
                             s->f->data[0] + 4 * s->f->linesize[0],
-                            s->f->linesize[0], yoff,
-                            ref2->data[0], ref2->linesize[0],
+                            yoff, ref2->data[0], ref2->linesize[0],
                             (row << 3) + 4, col << 3, &b->mv[2][1],
                             4, 4, s->cols << 3, s->rows << 3);
                 mc_luma_dir(s, s->dsp.mc[3][b->filter][1],
                             s->f->data[0] + 4 * s->f->linesize[0] + 4,
-                            s->f->linesize[0], yoff,
-                            ref2->data[0], ref2->linesize[0],
+                            yoff, ref2->data[0], ref2->linesize[0],
                             (row << 3) + 4, (col << 3) + 4, &b->mv[3][1],
                             4, 4, s->cols << 3, s->rows << 3);
             }
@@ -2275,16 +2256,14 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
         int bwl = bwlog_tab[0][b->bs];
         int bw = bwh_tab[0][b->bs][0] * 4, bh = bwh_tab[0][b->bs][1] * 4;
 
-        mc_luma_dir(s, s->dsp.mc[bwl][b->filter][0],
-                    s->f->data[0], s->f->linesize[0], yoff,
-                    ref1->data[0], ref1->linesize[0],
+        mc_luma_dir(s, s->dsp.mc[bwl][b->filter][0], s->f->data[0],
+                    yoff, ref1->data[0], ref1->linesize[0],
                     row << 3, col << 3, &b->mv[0][0],
                     bw, bh, s->cols << 3, s->rows << 3);
 
         if (b->comp)
-            mc_luma_dir(s, s->dsp.mc[bwl][b->filter][1],
-                        s->f->data[0], s->f->linesize[0], yoff,
-                        ref2->data[0], ref2->linesize[0],
+            mc_luma_dir(s, s->dsp.mc[bwl][b->filter][1], s->f->data[0],
+                        yoff, ref2->data[0], ref2->linesize[0],
                         row << 3, col << 3, &b->mv[0][1],
                         bw, bh, s->cols << 3, s->rows << 3);
     }
