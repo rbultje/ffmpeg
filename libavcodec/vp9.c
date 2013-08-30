@@ -1886,9 +1886,9 @@ static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
     }
     if (b->tx > TX_4X4) { // FIXME slow
         for (y = 0; y < end_y; y += step1d)
-            memset(&l[y + 1], l[y], step1d - 1);
+            memset(&l[y + 1], l[y], FFMIN(end_y - y - 1, step1d - 1));
         for (x = 0; x < end_x; x += step1d)
-            memset(&a[x + 1], a[x], step1d - 1);
+            memset(&a[x + 1], a[x], FFMIN(end_x - x - 1, step1d - 1));
     }
 
     p = s->prob.coef[b->uvtx][1 /* uv */][!b->intra];
@@ -1927,9 +1927,9 @@ static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
         }
         if (b->uvtx > TX_4X4) { // FIXME slow
             for (y = 0; y < end_y; y += uvstep1d)
-                memset(&l[y + 1], l[y], uvstep1d - 1);
+                memset(&l[y + 1], l[y], FFMIN(end_y - y - 1, uvstep1d - 1));
             for (x = 0; x < end_x; x += uvstep1d)
-                memset(&a[x + 1], a[x], uvstep1d - 1);
+                memset(&a[x + 1], a[x], FFMIN(end_x - x - 1, uvstep1d - 1));
         }
     }
 
@@ -3231,24 +3231,6 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
                     if ((res = decode_sb(ctx, row, col, lflvl_ptr,
                                          yoff3, uvoff3, BL_64X64)) < 0)
                         return res;
-
-                    // clean out-of-visible-frame contexts
-                    if (s->cols - col < 8) {
-                        memset(&s->above_y_nnz_ctx[s->cols * 2], 0,
-                               (col + 8 - s->cols) * 2);
-                        memset(&s->above_uv_nnz_ctx[0][s->cols], 0,
-                               col + 8 - s->cols);
-                        memset(&s->above_uv_nnz_ctx[1][s->cols], 0,
-                               col + 8 - s->cols);
-                    }
-                    if (s->rows - row < 8) {
-                        memset(&s->left_y_nnz_ctx[(s->rows & 7) * 2], 0,
-                               (row + 8 - s->rows) * 2);
-                        memset(&s->left_uv_nnz_ctx[0][s->rows & 7], 0,
-                               row + 8 - s->rows);
-                        memset(&s->left_uv_nnz_ctx[1][s->rows & 7], 0,
-                               row + 8 - s->rows);
-                    }
                 }
 
                 // backup pre-loopfilter reconstruction data for intra
