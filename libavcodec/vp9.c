@@ -2373,13 +2373,32 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
 
 static av_always_inline void mask_edges(struct VP9Filter *lflvl, int is_uv,
                                         int row_and_7, int col_and_7,
-                                        int w, int h, int col_end,
+                                        int w, int h, int col_end, int row_end,
                                         enum TxfmMode tx, int skip_inter)
 {
     // FIXME I'm pretty sure all loops can be replaced by a single LUT if
     // we make VP9Filter.mask uint64_t (i.e. row/col all single variable)
     // and make the LUT 5-indexed (bl, bp, is_uv, tx and row/col), and then
     // use row_and_7/col_and_7 as shifts (1*col_and_7+8*row_and_7)
+
+    // the intended behaviour of the vp9 loopfilter is to work on 8-pixel
+    // edges. This means that for UV, we work on two subsampled blocks at
+    // a time, and we only use the topleft block's mode information to set
+    // things like block strength. Thus, for any block size smaller than
+    // 16x16, ignore the odd portion of the block.
+    if (tx == TX_4X4 && is_uv) {
+        if (h == 1) {
+            if (row_and_7 & 1)
+                return;
+            if (!row_end)
+                h += 1;
+        }
+        if (w == 1) {
+            if (col_and_7 & 1)
+                return;
+            w += 1;
+        }
+    }
 
     if (tx == TX_4X4 && !skip_inter) {
         int t = 1 << col_and_7, m_col = (t << w) - t, y;
@@ -2432,16 +2451,37 @@ static av_always_inline void mask_edges(struct VP9Filter *lflvl, int is_uv,
             static const unsigned masks[4] = { 0xff, 0x55, 0x11, 0x01 };
             int m_row = m_col & masks[l2];
 
-            for (y = row_and_7; y < h + row_and_7; y++)
-                lflvl->mask[is_uv][0][y][mask_id] |= m_row;
-            for (y = row_and_7; y < h + row_and_7; y += step1d)
-                lflvl->mask[is_uv][1][y][mask_id] |= m_col;
-        } else if (tx != TX_4X4) {
-            int mask_id = (tx == TX_8X8);
+            // at odd UV col/row edges tx16/tx32 loopfilter edges, force
+            // 8wd loopfilter to prevent going off the visible edge.
+            if (is_uv && tx > TX_8X8 && (w ^ (w - 1)) == 1) {
+                int m_row_16 = ((t << (w - 1)) - t) & masks[l2];
+                int m_row_8 = m_row - m_row_16;
 
+                for (y = row_and_7; y < h + row_and_7; y++) {
+                    lflvl->mask[is_uv][0][y][0] |= m_row_16;
+                    lflvl->mask[is_uv][0][y][1] |= m_row_8;
+                }
+            } else {
+                for (y = row_and_7; y < h + row_and_7; y++)
+                    lflvl->mask[is_uv][0][y][mask_id] |= m_row;
+            }
+
+            if (is_uv && tx > TX_8X8 && (h ^ (h - 1)) == 1) {
+                for (y = row_and_7; y < h + row_and_7 - 1; y += step1d)
+                    lflvl->mask[is_uv][1][y][0] |= m_col;
+                lflvl->mask[is_uv][1][y][1] |= m_col;
+            } else {
+                for (y = row_and_7; y < h + row_and_7; y += step1d)
+                    lflvl->mask[is_uv][1][y][mask_id] |= m_col;
+            }
+        } else if (tx != TX_4X4) {
+            int mask_id;
+
+            mask_id = (tx == TX_8X8) || (is_uv && h == 1);
+            lflvl->mask[is_uv][1][row_and_7][mask_id] |= m_col;
+            mask_id = (tx == TX_8X8) || (is_uv && w == 1);
             for (y = row_and_7; y < h + row_and_7; y++)
                 lflvl->mask[is_uv][0][y][mask_id] |= t;
-            lflvl->mask[is_uv][1][row_and_7][mask_id] |= m_col;
         } else if (is_uv) {
             int t8 = t & 0x01, t4 = t - t8;
 
@@ -2508,10 +2548,11 @@ static int decode_b(AVCodecContext *ctx, int row, int col,
 
         for (y = 0; y < h4; y++)
             memset(&lflvl->level[((row & 7) + y) * 8 + (col & 7)], lvl, w4);
-        mask_edges(lflvl, 0, row & 7, col & 7, x_end, y_end, 0, b.tx, skip_inter);
+        mask_edges(lflvl, 0, row & 7, col & 7, x_end, y_end, 0, 0, b.tx, skip_inter);
         mask_edges(lflvl, 1, row & 7, col & 7, x_end, y_end,
-                   s->cols & 1 && col + w4 >= s->cols ? s->cols & 7 : 0, b.uvtx,
-                   skip_inter);
+                   s->cols & 1 && col + w4 >= s->cols ? s->cols & 7 : 0,
+                   s->rows & 1 && row + h4 >= s->rows ? s->rows & 7 : 0,
+                   b.uvtx, skip_inter);
 
         if (!s->filter.lim_lut[lvl]) {
             int sharp = s->filter.sharpness;
