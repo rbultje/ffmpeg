@@ -1,4 +1,7 @@
 vp9:
+- emulated_edge_mc() needs 2 stride arguments to support 64x64 images where
+  the whole image is encoded as a 64x64 block using subpixel interpolation
+  (and thus requires 71 source pixels per line).
 - try to replace the ugly ref frame context (for bitstream parsing) with
   some kind of LUT
 - prefetch magic

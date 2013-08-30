@@ -95,8 +95,9 @@ typedef struct VP9DSPContext {
      *
      * dst/stride are aligned by hsize
      */
-    void (*mc[5][4][2][2][2])(uint8_t *dst, const uint8_t *src,
-                              ptrdiff_t stride, int h, int mx, int my);
+    void (*mc[5][4][2][2][2])(uint8_t *dst, ptrdiff_t dst_stride,
+                              const uint8_t *src, ptrdiff_t src_stride,
+                              int h, int mx, int my);
 } VP9DSPContext;
 
 void ff_vp9dsp_init(VP9DSPContext *dsp);

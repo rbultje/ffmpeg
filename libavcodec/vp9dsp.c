@@ -1627,19 +1627,21 @@ static void vp9dsp_loopfilter_init(VP9DSPContext *dsp)
     dsp->loop_filter_mix2[1][1][1] = loop_filter_v_88_16_c;
 }
 
-static av_always_inline void copy_c(uint8_t *dst, const uint8_t *src,
-                                    ptrdiff_t stride, int w, int h)
+static av_always_inline void copy_c(uint8_t *dst, ptrdiff_t dst_stride,
+                                    const uint8_t *src, ptrdiff_t src_stride,
+                                    int w, int h)
 {
     do {
         memcpy(dst, src, w);
 
-        dst += stride;
-        src += stride;
+        dst += dst_stride;
+        src += src_stride;
     } while (--h);
 }
 
-static av_always_inline void avg_c(uint8_t *dst, const uint8_t *src, \
-                                   ptrdiff_t stride, int w, int h)
+static av_always_inline void avg_c(uint8_t *dst, ptrdiff_t dst_stride,
+                                   const uint8_t *src, ptrdiff_t src_stride,
+                                   int w, int h)
 {
     do {
         int x;
@@ -1647,16 +1649,17 @@ static av_always_inline void avg_c(uint8_t *dst, const uint8_t *src, \
         for (x = 0; x < w; x += 4)
             AV_WN32A(&dst[x], rnd_avg32(AV_RN32A(&dst[x]), AV_RN32(&src[x])));
 
-        dst += stride;
-        src += stride;
+        dst += dst_stride;
+        src += src_stride;
     } while (--h);
 }
 
 #define fpel_fn(type, sz) \
-static void type##sz##_c(uint8_t *dst, const uint8_t *src, \
-                         ptrdiff_t stride, int h, int mx, int my) \
+static void type##sz##_c(uint8_t *dst, ptrdiff_t dst_stride, \
+                         const uint8_t *src, ptrdiff_t src_stride, \
+                         int h, int mx, int my) \
 { \
-    type##_c(dst, src, stride, sz, h); \
+    type##_c(dst, dst_stride, src, src_stride, sz, h); \
 }
 
 #define copy_avg_fn(sz) \
@@ -1734,8 +1737,8 @@ static const int8_t vp9_subpel_filters[3][15][8] = {
                    F[6] * src[x + +3 * stride] + \
                    F[7] * src[x + +4 * stride] + 64) >> 7)
 
-static av_always_inline void do_8tap_1d_c(uint8_t *dst, const uint8_t *src,
-                                          ptrdiff_t stride,
+static av_always_inline void do_8tap_1d_c(uint8_t *dst, ptrdiff_t dst_stride,
+                                          const uint8_t *src, ptrdiff_t src_stride,
                                           int w, int h, ptrdiff_t ds,
                                           const int8_t *filter, int avg)
 {
@@ -1749,35 +1752,35 @@ static av_always_inline void do_8tap_1d_c(uint8_t *dst, const uint8_t *src,
                 dst[x] = FILTER_8TAP(src, x, filter, ds);
             }
 
-        dst += stride;
-        src += stride;
+        dst += dst_stride;
+        src += src_stride;
     } while (--h);
 }
 
 #define filter_8tap_1d_fn(opn, opa, dir, ds) \
-static av_noinline void opn##_8tap_1d_##dir##_c(uint8_t *dst, const uint8_t *src, \
-                                                ptrdiff_t stride, int w, int h, \
-                                                const int8_t *filter) \
+static av_noinline void opn##_8tap_1d_##dir##_c(uint8_t *dst, ptrdiff_t dst_stride, \
+                                                const uint8_t *src, ptrdiff_t src_stride, \
+                                                int w, int h, const int8_t *filter) \
 { \
-    do_8tap_1d_c(dst, src, stride, w, h, ds, filter, opa); \
+    do_8tap_1d_c(dst, dst_stride, src, src_stride, w, h, ds, filter, opa); \
 }
 
-filter_8tap_1d_fn(put, 0, v, stride)
+filter_8tap_1d_fn(put, 0, v, src_stride)
 filter_8tap_1d_fn(put, 0, h, 1)
-filter_8tap_1d_fn(avg, 1, v, stride)
+filter_8tap_1d_fn(avg, 1, v, src_stride)
 filter_8tap_1d_fn(avg, 1, h, 1)
 
 #undef filter_8tap_1d_fn
 
-static av_always_inline void do_8tap_2d_c(uint8_t *dst, const uint8_t *src, \
-                                          ptrdiff_t stride, int w, int h,
-                                          const int8_t *filterx,
+static av_always_inline void do_8tap_2d_c(uint8_t *dst, ptrdiff_t dst_stride,
+                                          const uint8_t *src, ptrdiff_t src_stride,
+                                          int w, int h, const int8_t *filterx,
                                           const int8_t *filtery, int avg)
 {
     int tmp_h = h + 7;
     uint8_t tmp[64 * 71], *tmp_ptr = tmp;
 
-    src -= stride * 3;
+    src -= src_stride * 3;
     do {
         int x;
 
@@ -1785,7 +1788,7 @@ static av_always_inline void do_8tap_2d_c(uint8_t *dst, const uint8_t *src, \
             tmp_ptr[x] = FILTER_8TAP(src, x, filterx, 1);
 
         tmp_ptr += 64;
-        src += stride;
+        src += src_stride;
     } while (--tmp_h);
 
     tmp_ptr = tmp + 64 * 3;
@@ -1800,17 +1803,17 @@ static av_always_inline void do_8tap_2d_c(uint8_t *dst, const uint8_t *src, \
             }
 
         tmp_ptr += 64;
-        dst += stride;
+        dst += dst_stride;
     } while (--h);
 }
 
 #define filter_8tap_2d_fn(opn, opa) \
-static av_noinline void opn##_8tap_2d_hv_c(uint8_t *dst, const uint8_t *src, \
-                                           ptrdiff_t stride, int w, int h, \
-                                           const int8_t *filterx, \
+static av_noinline void opn##_8tap_2d_hv_c(uint8_t *dst, ptrdiff_t dst_stride, \
+                                           const uint8_t *src, ptrdiff_t src_stride, \
+                                           int w, int h, const int8_t *filterx, \
                                            const int8_t *filtery) \
 { \
-    do_8tap_2d_c(dst, src, stride, w, h, filterx, filtery, opa); \
+    do_8tap_2d_c(dst, dst_stride, src, src_stride, w, h, filterx, filtery, opa); \
 }
 
 filter_8tap_2d_fn(put, 0)
@@ -1821,20 +1824,20 @@ filter_8tap_2d_fn(avg, 1)
 #undef FILTER_8TAP
 
 #define filter_fn_1d(sz, dir, dir_m, type, type_idx, avg) \
-static void avg##_8tap_##type##_##sz##dir##_c(uint8_t *dst, const uint8_t *src, \
-                                              ptrdiff_t stride, int h, \
-                                              int mx, int my) \
+static void avg##_8tap_##type##_##sz##dir##_c(uint8_t *dst, ptrdiff_t dst_stride, \
+                                              const uint8_t *src, ptrdiff_t src_stride, \
+                                              int h, int mx, int my) \
 { \
-    avg##_8tap_1d_##dir##_c(dst, src, stride, sz, h, \
+    avg##_8tap_1d_##dir##_c(dst, dst_stride, src, src_stride, sz, h, \
                             vp9_subpel_filters[type_idx][dir_m - 1]); \
 }
 
 #define filter_fn_2d(sz, type, type_idx, avg) \
-static void avg##_8tap_##type##_##sz##hv_c(uint8_t *dst, const uint8_t *src, \
-                                           ptrdiff_t stride, int h, \
-                                           int mx, int my) \
+static void avg##_8tap_##type##_##sz##hv_c(uint8_t *dst, ptrdiff_t dst_stride, \
+                                           const uint8_t *src, ptrdiff_t src_stride, \
+                                           int h, int mx, int my) \
 { \
-    avg##_8tap_2d_hv_c(dst, src, stride, sz, h, \
+    avg##_8tap_2d_hv_c(dst, dst_stride, src, src_stride, sz, h, \
                        vp9_subpel_filters[type_idx][mx - 1], \
                        vp9_subpel_filters[type_idx][my - 1]); \
 }
@@ -1842,9 +1845,9 @@ static void avg##_8tap_##type##_##sz##hv_c(uint8_t *dst, const uint8_t *src, \
 #define FILTER_BILIN(src, x, mxy, stride) \
     (src[x] + ((mxy * (src[x + stride] - src[x]) + 8) >> 4))
 
-static av_always_inline void do_bilin_1d_c(uint8_t *dst, const uint8_t *src,
-                                           ptrdiff_t stride, int w, int h,
-                                           ptrdiff_t ds, int mxy, int avg)
+static av_always_inline void do_bilin_1d_c(uint8_t *dst, ptrdiff_t dst_stride,
+                                           const uint8_t *src, ptrdiff_t src_stride,
+                                           int w, int h, ptrdiff_t ds, int mxy, int avg)
 {
     do {
         int x;
@@ -1856,29 +1859,29 @@ static av_always_inline void do_bilin_1d_c(uint8_t *dst, const uint8_t *src,
                 dst[x] = FILTER_BILIN(src, x, mxy, ds);
             }
 
-        dst += stride;
-        src += stride;
+        dst += dst_stride;
+        src += src_stride;
     } while (--h);
 }
 
 #define bilin_1d_fn(opn, opa, dir, ds) \
-static av_noinline void opn##_bilin_1d_##dir##_c(uint8_t *dst, const uint8_t *src, \
-                                                 ptrdiff_t stride, int w, int h, \
-                                                 int mxy) \
+static av_noinline void opn##_bilin_1d_##dir##_c(uint8_t *dst, ptrdiff_t dst_stride, \
+                                                 const uint8_t *src, ptrdiff_t src_stride, \
+                                                 int w, int h, int mxy) \
 { \
-    do_bilin_1d_c(dst, src, stride, w, h, ds, mxy, opa); \
+    do_bilin_1d_c(dst, dst_stride, src, src_stride, w, h, ds, mxy, opa); \
 }
 
-bilin_1d_fn(put, 0, v, stride)
+bilin_1d_fn(put, 0, v, src_stride)
 bilin_1d_fn(put, 0, h, 1)
-bilin_1d_fn(avg, 1, v, stride)
+bilin_1d_fn(avg, 1, v, src_stride)
 bilin_1d_fn(avg, 1, h, 1)
 
 #undef bilin_1d_fn
 
-static av_always_inline void do_bilin_2d_c(uint8_t *dst, const uint8_t *src,
-                                           ptrdiff_t stride, int w, int h,
-                                           int mx, int my, int avg)
+static av_always_inline void do_bilin_2d_c(uint8_t *dst, ptrdiff_t dst_stride,
+                                           const uint8_t *src, ptrdiff_t src_stride,
+                                           int w, int h, int mx, int my, int avg)
 {
     uint8_t tmp[64 * 65], *tmp_ptr = tmp;
     int tmp_h = h + 1;
@@ -1890,7 +1893,7 @@ static av_always_inline void do_bilin_2d_c(uint8_t *dst, const uint8_t *src,
             tmp_ptr[x] = FILTER_BILIN(src, x, mx, 1);
 
         tmp_ptr += 64;
-        src += stride;
+        src += src_stride;
     } while (--tmp_h);
 
     tmp_ptr = tmp;
@@ -1905,16 +1908,16 @@ static av_always_inline void do_bilin_2d_c(uint8_t *dst, const uint8_t *src,
             }
 
         tmp_ptr += 64;
-        dst += stride;
+        dst += dst_stride;
     } while (--h);
 }
 
 #define bilin_2d_fn(opn, opa) \
-static av_noinline void opn##_bilin_2d_hv_c(uint8_t *dst, const uint8_t *src, \
-                                            ptrdiff_t stride, int w, int h, \
-                                            int mx, int my) \
+static av_noinline void opn##_bilin_2d_hv_c(uint8_t *dst, ptrdiff_t dst_stride, \
+                                            const uint8_t *src, ptrdiff_t src_stride, \
+                                            int w, int h, int mx, int my) \
 { \
-    do_bilin_2d_c(dst, src, stride, w, h, mx, my, opa); \
+    do_bilin_2d_c(dst, dst_stride, src, src_stride, w, h, mx, my, opa); \
 }
 
 bilin_2d_fn(put, 0)
@@ -1925,17 +1928,19 @@ bilin_2d_fn(avg, 1)
 #undef FILTER_BILIN
 
 #define bilinf_fn_1d(sz, dir, dir_m, avg) \
-static void avg##_bilin_##sz##dir##_c(uint8_t *dst, const uint8_t *src, \
-                                      ptrdiff_t stride, int h, int mx, int my) \
+static void avg##_bilin_##sz##dir##_c(uint8_t *dst, ptrdiff_t dst_stride, \
+                                      const uint8_t *src, ptrdiff_t src_stride, \
+                                      int h, int mx, int my) \
 { \
-    avg##_bilin_1d_##dir##_c(dst, src, stride, sz, h, dir_m); \
+    avg##_bilin_1d_##dir##_c(dst, dst_stride, src, src_stride, sz, h, dir_m); \
 }
 
 #define bilinf_fn_2d(sz, avg) \
-static void avg##_bilin_##sz##hv_c(uint8_t *dst,  const uint8_t *src, \
-                                   ptrdiff_t stride, int h, int mx, int my) \
+static void avg##_bilin_##sz##hv_c(uint8_t *dst, ptrdiff_t dst_stride, \
+                                   const uint8_t *src, ptrdiff_t src_stride, \
+                                   int h, int mx, int my) \
 { \
-    avg##_bilin_2d_hv_c(dst, src, stride, sz, h, mx, my); \
+    avg##_bilin_2d_hv_c(dst, dst_stride, src, src_stride, sz, h, mx, my); \
 }
 
 #define filter_fn(sz, avg) \
