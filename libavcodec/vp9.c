@@ -2396,7 +2396,8 @@ static av_always_inline void mask_edges(struct VP9Filter *lflvl, int is_uv,
         if (w == 1) {
             if (col_and_7 & 1)
                 return;
-            w += 1;
+            if (!col_end)
+                w += 1;
         }
     }
 
