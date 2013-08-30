@@ -57,7 +57,7 @@ fate-vp8: $(FATE_VP8-yes)
 
 define FATE_VP9_SUITE
 FATE_VP9-$(CONFIG_MATROSKA_DEMUXER) += fate-vp9$(2)-$(1)
-fate-vp9$(2)-$(1): CMD = framemd5 $(3) -i $(TARGET_SAMPLES)/vp9-test-vectors/vp90-2-$(1).webm -frames:v 1
+fate-vp9$(2)-$(1): CMD = framemd5 $(3) -i $(TARGET_SAMPLES)/vp9-test-vectors/vp90-2-$(1).webm
 fate-vp9$(2)-$(1): REF = $(SRC_PATH)/tests/ref/fate/vp9-$(1)
 endef
 
