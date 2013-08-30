@@ -805,28 +805,58 @@ static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
     uint32_t mem = INVALID_MV;
     int i;
 
-#define RETURN_MV(mv) \
+#define RETURN_DIRECT_MV(mv) \
     do { \
         uint32_t m = AV_RN32A(&mv); \
         if (!idx) { \
-            clamp_mv(pmv, &mv, s); \
+            AV_WN32A(pmv, m); \
             return; \
         } else if (mem == INVALID_MV) { \
             mem = m; \
         } else if (m != mem) { \
-            clamp_mv(pmv, &mv, s); \
+            AV_WN32A(pmv, m); \
             return; \
         } \
     } while (0)
 
     if (sb >= 0) {
         if (sb == 2 || sb == 1) {
-            RETURN_MV(b->mv[0][z]);
+            RETURN_DIRECT_MV(b->mv[0][z]);
         } else if (sb == 3) {
-            RETURN_MV(b->mv[2][z]);
-            RETURN_MV(b->mv[1][z]);
-            RETURN_MV(b->mv[0][z]);
+            RETURN_DIRECT_MV(b->mv[2][z]);
+            RETURN_DIRECT_MV(b->mv[1][z]);
+            RETURN_DIRECT_MV(b->mv[0][z]);
         }
+
+#define RETURN_MV(mv) \
+    do { \
+        if (sb > 0) { \
+            VP56mv tmp; \
+            uint32_t m; \
+            clamp_mv(&tmp, &mv, s); \
+            m = AV_RN32A(&tmp); \
+            if (!idx) { \
+                AV_WN32A(pmv, m); \
+                return; \
+            } else if (mem == INVALID_MV) { \
+                mem = m; \
+            } else if (m != mem) { \
+                AV_WN32A(pmv, m); \
+                return; \
+            } \
+        } else { \
+            uint32_t m = AV_RN32A(&mv); \
+            if (!idx) { \
+                clamp_mv(pmv, &mv, s); \
+                return; \
+            } else if (mem == INVALID_MV) { \
+                mem = m; \
+            } else if (m != mem) { \
+                clamp_mv(pmv, &mv, s); \
+                return; \
+            } \
+        } \
+    } while (0)
 
         if (row > 0) {
             struct mv_storage *mv = &s->mv[0][(row - 1) * s->sb_cols * 8 + col];
@@ -836,7 +866,7 @@ static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
                 RETURN_MV(s->above_mv_ctx[2 * col + (sb & 1)][1]);
             }
         }
-        if (col > 0) {
+        if (col > s->tiling.tile_col_start) {
             struct mv_storage *mv = &s->mv[0][row * s->sb_cols * 8 + col - 1];
             if (mv->ref[0] == ref) {
                 RETURN_MV(s->left_mv_ctx[2 * (row & 7) + (sb >> 1)][0]);

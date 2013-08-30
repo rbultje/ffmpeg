@@ -1,7 +1,6 @@
 vp9:
 - try to replace the ugly ref frame context (for bitstream parsing) with
   some kind of LUT
-- inter uv pred
 - prefetch magic
 - remove all memsets in context setting (above/left) and replace with faster
   versions that understand we're only ever writing 1,2,4,8,16 bytes.
@@ -19,8 +18,6 @@ vp9:
 - x86 simd
 - frame/tile mt
 - scalable/resolution changing
-- add >1 frames to all fate tests
-- fate tests for resolution changing, tiling (row/col), the weird UV loopfilter
-  hack to use 8x8 lf for 16x16 on odd col/row image size edges
+- fate tests for resolution changing, tiling (row/col), segmentation
 - put boolcoder on stack of coeff decoder or mode decoder (see vp8/h264)
 
