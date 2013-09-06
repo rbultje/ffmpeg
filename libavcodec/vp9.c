@@ -71,11 +71,24 @@ struct VP9Filter {
                               [8 /* rows */][4 /* 0=16, 1=8, 2=4, 3=inner4 */];
 };
 
+typedef struct {
+    unsigned seg_id:3, intra:1, comp:1, ref[2], mode[4], uvmode, skip:1;
+    enum FilterMode filter;
+    VP56mv mv[4 /* b_idx */][2 /* ref */];
+    enum BlockSize bs;
+    enum TxfmMode tx, uvtx;
+
+    int row, row7, col, col7;
+    uint8_t *dst[3];
+    ptrdiff_t y_stride, uv_stride;
+} VP9Block;
+
 typedef struct VP9Context {
     VP9DSPContext dsp;
     VideoDSPContext vdsp;
     GetBitContext gb;
     VP56RangeCoder c;
+    VP9Block b;
 
     // bitstream header
     unsigned profile:2;
@@ -205,6 +218,8 @@ typedef struct VP9Context {
     DECLARE_ALIGNED(16, int16_t, uvblock)[2][1024];
     uint8_t uveob[2][64];
     VP56mv min_mv, max_mv;
+    DECLARE_ALIGNED(16, uint8_t, tmp_y)[64*64];
+    DECLARE_ALIGNED(16, uint8_t, tmp_uv)[2][32*32];
 } VP9Context;
 
 static int update_size(AVCodecContext *ctx, int w, int h)
@@ -743,14 +758,6 @@ static int decode_frame_header(AVCodecContext *ctx,
     return (data2 - data) + size2;
 }
 
-typedef struct {
-    unsigned seg_id:3, intra:1, comp:1, ref[2], mode[4], uvmode, skip:1;
-    enum FilterMode filter;
-    VP56mv mv[4 /* b_idx */][2 /* ref */];
-    enum BlockSize bs;
-    enum TxfmMode tx, uvtx;
-} VP9Block;
-
 static const uint8_t bwh_tab[2][N_BS_SIZES][2] = {
     {
         { 16, 16 }, { 16, 8 }, { 8, 16 }, { 8, 8 }, { 8, 4 }, { 4, 8 },
@@ -768,7 +775,7 @@ static av_always_inline void clamp_mv(VP56mv *dst, const VP56mv *src,
     dst->y = av_clip(src->y, s->min_mv.y, s->max_mv.y);
 }
 
-static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
+static void find_ref_mvs(VP9Context *s,
                          VP56mv *pmv, int ref, int z, int idx, int sb)
 {
     static const int8_t mv_ref_blk_off[N_BS_SIZES][8][2] = {
@@ -799,6 +806,8 @@ static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
         [BS_4x4]   = {{  0, -1 }, { -1,  0 }, { -1, -1 }, {  0, -2 },
                       { -2,  0 }, { -1, -2 }, { -2, -1 }, { -2, -2 }},
     };
+    VP9Block *const b = &s->b;
+    int row = b->row, col = b->col, row7 = b->row7;
     const int8_t (*p)[2] = mv_ref_blk_off[b->bs];
 #define INVALID_MV 0x80008000U
     uint32_t mem = INVALID_MV;
@@ -868,9 +877,9 @@ static void find_ref_mvs(VP9Context *s, VP9Block *b, int row, int col,
         if (col > s->tiling.tile_col_start) {
             struct mv_storage *mv = &s->mv[0][row * s->sb_cols * 8 + col - 1];
             if (mv->ref[0] == ref) {
-                RETURN_MV(s->left_mv_ctx[2 * (row & 7) + (sb >> 1)][0]);
+                RETURN_MV(s->left_mv_ctx[2 * row7 + (sb >> 1)][0]);
             } else if (mv->ref[1] == ref) {
-                RETURN_MV(s->left_mv_ctx[2 * (row & 7) + (sb >> 1)][1]);
+                RETURN_MV(s->left_mv_ctx[2 * row7 + (sb >> 1)][1]);
             }
         }
         i = 2;
@@ -1001,16 +1010,18 @@ static av_always_inline int read_mv_component(VP9Context *s, int idx, int hp)
     return sign ? -(n + 1) : (n + 1);
 }
 
-static void fill_mv(VP9Context *s, VP9Block *b, int row, int col,
+static void fill_mv(VP9Context *s,
                     VP56mv *mv, int mode, int sb)
 {
+    VP9Block *const b = &s->b;
+
     if (mode == ZEROMV) {
         memset(mv, 0, sizeof(*mv) * 2);
     } else {
         int hp;
 
         // FIXME cache this value and reuse for other subblocks
-        find_ref_mvs(s, b, row, col, &mv[0], b->ref[0], 0, mode == NEARMV,
+        find_ref_mvs(s, &mv[0], b->ref[0], 0, mode == NEARMV,
                      mode == NEWMV ? -1 : sb);
         // FIXME maybe move this code into find_ref_mvs()
         if ((mode == NEWMV || sb == -1) &&
@@ -1041,7 +1052,7 @@ static void fill_mv(VP9Context *s, VP9Block *b, int row, int col,
 
         if (b->comp) {
             // FIXME cache this value and reuse for other subblocks
-            find_ref_mvs(s, b, row, col, &mv[1], b->ref[1], 1, mode == NEARMV,
+            find_ref_mvs(s, &mv[1], b->ref[1], 1, mode == NEARMV,
                          mode == NEWMV ? -1 : sb);
             if ((mode == NEWMV || sb == -1) &&
                 !(hp = s->highprecisionmvs && abs(mv[1].x) < 64 && abs(mv[1].y) < 64)) {
@@ -1072,7 +1083,7 @@ static void fill_mv(VP9Context *s, VP9Block *b, int row, int col,
     }
 }
 
-static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
+static int decode_mode(AVCodecContext *ctx)
 {
     static const uint8_t left_ctx[N_BS_SIZES] = {
         0x0, 0x8, 0x0, 0x8, 0xc, 0x8, 0xc, 0xe, 0xc, 0xe, 0xf, 0xe, 0xf
@@ -1085,10 +1096,12 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
         TX_16X16, TX_8X8, TX_8X8, TX_8X8, TX_4X4, TX_4X4, TX_4X4
     };
     VP9Context *s = ctx->priv_data;
+    VP9Block *const b = &s->b;
+    int row = b->row, col = b->col, row7 = b->row7;
     enum TxfmMode max_tx = max_tx_for_bl_bp[b->bs];
     int w4 = FFMIN(s->cols - col, bwh_tab[1][b->bs][0]);
     int h4 = FFMIN(s->rows - row, bwh_tab[1][b->bs][1]), y;
-    int have_a = row > 0, have_l = col > s->tiling.tile_col_start, row7 = row & 7;
+    int have_a = row > 0, have_l = col > s->tiling.tile_col_start;
 
     if (!s->segmentation.enabled) {
         b->seg_id = 0;
@@ -1622,13 +1635,13 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
             b->mode[0] = vp8_rac_get_tree(&s->c, vp9_inter_mode_tree,
                                           s->prob.p.mv_mode[c]);
             s->counts.mv_mode[c][b->mode[0] - 10]++;
-            fill_mv(s, b, row, col, b->mv[0], b->mode[0], 0);
+            fill_mv(s, b->mv[0], b->mode[0], 0);
 
             if (b->bs != BS_8x4) {
                 b->mode[1] = vp8_rac_get_tree(&s->c, vp9_inter_mode_tree,
                                               s->prob.p.mv_mode[c]);
                 s->counts.mv_mode[c][b->mode[1] - 10]++;
-                fill_mv(s, b, row, col, b->mv[1], b->mode[1], 1);
+                fill_mv(s, b->mv[1], b->mode[1], 1);
             } else {
                 b->mode[1] = b->mode[0];
                 AV_COPY32(&b->mv[1][0], &b->mv[0][0]);
@@ -1639,13 +1652,13 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
                 b->mode[2] = vp8_rac_get_tree(&s->c, vp9_inter_mode_tree,
                                               s->prob.p.mv_mode[c]);
                 s->counts.mv_mode[c][b->mode[2] - 10]++;
-                fill_mv(s, b, row, col, b->mv[2], b->mode[2], 2);
+                fill_mv(s, b->mv[2], b->mode[2], 2);
 
                 if (b->bs != BS_8x4) {
                     b->mode[3] = vp8_rac_get_tree(&s->c, vp9_inter_mode_tree,
                                                   s->prob.p.mv_mode[c]);
                     s->counts.mv_mode[c][b->mode[3] - 10]++;
-                    fill_mv(s, b, row, col, b->mv[3], b->mode[3], 3);
+                    fill_mv(s, b->mv[3], b->mode[3], 3);
                 } else {
                     b->mode[3] = b->mode[2];
                     AV_COPY32(&b->mv[3][0], &b->mv[2][0]);
@@ -1660,7 +1673,7 @@ static int decode_mode(AVCodecContext *ctx, int row, int col, VP9Block *b)
                 AV_COPY32(&b->mv[3][1], &b->mv[1][1]);
             }
         } else {
-            fill_mv(s, b, row, col, b->mv[0], b->mode[0], -1);
+            fill_mv(s, b->mv[0], b->mode[0], -1);
             AV_COPY32(&b->mv[1][0], &b->mv[0][0]);
             AV_COPY32(&b->mv[2][0], &b->mv[0][0]);
             AV_COPY32(&b->mv[3][0], &b->mv[0][0]);
@@ -1858,9 +1871,11 @@ static int decode_coeffs_b(VP56RangeCoder *c, int16_t *coef, int n_coeffs,
     return i;
 }
 
-static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
+static int decode_coeffs(AVCodecContext *ctx)
 {
     VP9Context *s = ctx->priv_data;
+    VP9Block *const b = &s->b;
+    int row = b->row, col = b->col;
     uint8_t (*p)[6][11] = s->prob.coef[b->tx][0 /* y */][!b->intra];
     unsigned (*c)[6][3] = s->counts.coef[b->tx][0 /* y */][!b->intra];
     unsigned (*e)[6][2] = s->counts.eob[b->tx][0 /* y */][!b->intra];
@@ -1966,7 +1981,8 @@ static int decode_coeffs(AVCodecContext *ctx, VP9Block *b, int row, int col)
 }
 
 static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **a,
-                                             uint8_t *dst, ptrdiff_t stride,
+                                             uint8_t *dst_edge, ptrdiff_t stride_edge,
+                                             uint8_t *dst_inner, ptrdiff_t stride_inner,
                                              uint8_t *l, int col, int x, int w,
                                              int row, int y, enum TxfmMode tx,
                                              int p)
@@ -2019,6 +2035,8 @@ static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **
         [DC_129_PRED]          = { 0 }
     };
 
+    // FIXME distinguish between dst_edge and dst_inner based on x/y for left/above
+
     assert(mode >= 0 && mode < 10);
     mode = mode_conv[mode][have_left][have_top];
     if (edges[mode].needs_top) {
@@ -2034,7 +2052,8 @@ static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **
         // post-loopfilter data)
         if (have_top)
             top = !(row & 7) && !y ?
-                s->intra_pred_data[p] + col * (8 >> !!p) + x * 4 : &dst[-stride];
+                s->intra_pred_data[p] + col * (8 >> !!p) + x * 4 :
+                y == 0 ? &dst_edge[-stride_edge] : &dst_inner[-stride_inner];
 
         if (have_top &&
             (!edges[mode].needs_topleft || have_left) &&
@@ -2073,6 +2092,8 @@ static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **
     if (edges[mode].needs_left) {
         if (have_left) {
             int n_px_need = 4 << tx, i, n_px_have = (((s->rows - row) << !p) - y) * 4;
+            uint8_t *dst = x == 0 ? dst_edge : dst_inner;
+            ptrdiff_t stride = x == 0 ? stride_edge : stride_inner;
 
             if (n_px_need <= n_px_have) {
                 for (i = 0; i < n_px_need; i++)
@@ -2090,24 +2111,26 @@ static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **
     return mode;
 }
 
-static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
-                        ptrdiff_t yoff, ptrdiff_t uvoff)
+static void intra_recon(AVCodecContext *ctx, ptrdiff_t y_off, ptrdiff_t uv_off)
 {
     VP9Context *s = ctx->priv_data;
+    VP9Block *const b = &s->b;
+    int row = b->row, col = b->col;
     int w4 = bwh_tab[1][b->bs][0] << 1, step1d = 1 << b->tx, n;
     int h4 = bwh_tab[1][b->bs][1] << 1, x, y, step = 1 << (b->tx * 2);
     int end_x = FFMIN(2 * (s->cols - col), w4);
     int end_y = FFMIN(2 * (s->rows - row), h4);
     int tx = 4 * s->lossless + b->tx, uvtx = b->uvtx + 4 * s->lossless;
     int uvstep1d = 1 << b->uvtx, p;
-    uint8_t *dst = s->f->data[0] + yoff;
+    uint8_t *dst = b->dst[0], *dst_r = s->f->data[0] + y_off;
 
     // FIXME fix overhangs (e.g. if pos+32>stride, then we need to emulate
     //       frame width, else we destroy pixels; for height, it also writes
     //       beyond allocated buffer edges)
     for (n = 0, y = 0; y < end_y; y += step1d) {
-        uint8_t *ptr = dst;
-        for (x = 0; x < end_x; x += step1d, ptr += 4 * step1d, n += step) {
+        uint8_t *ptr = dst, *ptr_r = dst_r;
+        for (x = 0; x < end_x; x += step1d, ptr += 4 * step1d,
+                               ptr_r += 4 * step1d, n += step) {
             int mode = b->mode[b->bs > BS_8x8 && b->tx == TX_4X4 ?
                                y * 2 + x : 0];
             LOCAL_ALIGNED_16(uint8_t, a_buf, [48]);
@@ -2115,14 +2138,16 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
             enum TxfmType txtp = vp9_intra_txfm_type[mode];
             int eob = b->tx > TX_8X8 ? AV_RN16A(&s->eob[n]) : s->eob[n];
 
-            mode = check_intra_mode(s, mode, &a, ptr, s->f->linesize[0], l,
+            mode = check_intra_mode(s, mode, &a, ptr_r, s->f->linesize[0],
+                                    ptr, b->y_stride, l,
                                     col, x, w4, row, y, b->tx, 0);
-            s->dsp.intra_pred[b->tx][mode](ptr, s->f->linesize[0], l, a);
+            s->dsp.intra_pred[b->tx][mode](ptr, b->y_stride, l, a);
             if (eob)
-                s->dsp.itxfm_add[tx][txtp](ptr, s->f->linesize[0],
+                s->dsp.itxfm_add[tx][txtp](ptr, b->y_stride,
                                            s->block + 16 * n, eob);
         }
-        dst += 4 * s->f->linesize[0] * step1d;
+        dst_r += 4 * s->f->linesize[0] * step1d;
+        dst   += 4 * b->y_stride       * step1d;
     }
 
     // U/V
@@ -2132,23 +2157,27 @@ static void intra_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
     end_y >>= 1;
     step = 1 << (b->uvtx * 2);
     for (p = 0; p < 2; p++) {
-        dst = s->f->data[1 + p] + uvoff;
+        dst   = b->dst[1 + p];
+        dst_r = s->f->data[1 + p] + uv_off;
         for (n = 0, y = 0; y < end_y; y += uvstep1d) {
-            uint8_t *ptr = dst;
-            for (x = 0; x < end_x; x += uvstep1d, ptr += 4 * uvstep1d, n += step) {
+            uint8_t *ptr = dst, *ptr_r = dst_r;
+            for (x = 0; x < end_x; x += uvstep1d, ptr += 4 * uvstep1d,
+                                   ptr_r += 4 * uvstep1d, n += step) {
                 int mode = b->uvmode;
                 LOCAL_ALIGNED_16(uint8_t, a_buf, [48]);
                 uint8_t *a = &a_buf[16], l[32];
                 int eob = b->uvtx > TX_8X8 ? AV_RN16A(&s->uveob[p][n]) : s->uveob[p][n];
 
-                mode = check_intra_mode(s, mode, &a, ptr, s->f->linesize[1], l,
+                mode = check_intra_mode(s, mode, &a, ptr_r, s->f->linesize[1],
+                                        ptr, b->uv_stride, l,
                                         col, x, w4, row, y, b->uvtx, p + 1);
-                s->dsp.intra_pred[b->uvtx][mode](ptr, s->f->linesize[1], l, a);
+                s->dsp.intra_pred[b->uvtx][mode](ptr, b->uv_stride, l, a);
                 if (eob)
-                    s->dsp.itxfm_add[uvtx][DCT_DCT](ptr, s->f->linesize[1],
+                    s->dsp.itxfm_add[uvtx][DCT_DCT](ptr, b->uv_stride,
                                                     s->uvblock[p] + 16 * n, eob);
             }
-            dst += 4 * uvstep1d * s->f->linesize[1];
+            dst_r += 4 * uvstep1d * s->f->linesize[1];
+            dst   += 4 * uvstep1d * b->uv_stride;
         }
     }
 }
@@ -2159,7 +2188,6 @@ typedef void (*vp9_mc_func)(uint8_t *dst, ptrdiff_t dst_stride,
 
 static av_always_inline void mc_luma_dir(VP9Context *s, vp9_mc_func (*mc)[2],
                                          uint8_t *dst, ptrdiff_t dst_stride,
-                                         ptrdiff_t off,
                                          const uint8_t *ref, ptrdiff_t ref_stride,
                                          ptrdiff_t y, ptrdiff_t x, const VP56mv *mv,
                                          int bw, int bh, int w, int h)
@@ -2182,12 +2210,12 @@ static av_always_inline void mc_luma_dir(VP9Context *s, vp9_mc_func (*mc)[2],
         ref = s->edge_emu_buffer + !!my * 3 * 80 + !!mx * 3;
         ref_stride = 80;
     }
-    mc[!!mx][!!my](dst + off, dst_stride, ref, ref_stride, bh, mx << 1, my << 1);
+    mc[!!mx][!!my](dst, dst_stride, ref, ref_stride, bh, mx << 1, my << 1);
 }
 
 static av_always_inline void mc_chroma_dir(VP9Context *s, vp9_mc_func (*mc)[2],
                                            uint8_t *dst_u, uint8_t *dst_v,
-                                           ptrdiff_t dst_stride, ptrdiff_t off,
+                                           ptrdiff_t dst_stride,
                                            const uint8_t *ref_u, ptrdiff_t src_stride_u,
                                            const uint8_t *ref_v, ptrdiff_t src_stride_v,
                                            ptrdiff_t y, ptrdiff_t x, const VP56mv *mv,
@@ -2209,67 +2237,68 @@ static av_always_inline void mc_chroma_dir(VP9Context *s, vp9_mc_func (*mc)[2],
                                  bw + !!mx * 7, bh + !!my * 7,
                                  x - !!mx * 3, y - !!my * 3, w, h);
         ref_u = s->edge_emu_buffer + !!my * 3 * 80 + !!mx * 3;
-        mc[!!mx][!!my](dst_u + off, dst_stride, ref_u, 80, bh, mx, my);
+        mc[!!mx][!!my](dst_u, dst_stride, ref_u, 80, bh, mx, my);
 
         s->vdsp.emulated_edge_mc(s->edge_emu_buffer, 80,
                                  ref_v - !!my * 3 * src_stride_v - !!mx * 3, src_stride_v,
                                  bw + !!mx * 7, bh + !!my * 7,
                                  x - !!mx * 3, y - !!my * 3, w, h);
         ref_v = s->edge_emu_buffer + !!my * 3 * 80 + !!mx * 3;
-        mc[!!mx][!!my](dst_v + off, dst_stride, ref_v, 80, bh, mx, my);
+        mc[!!mx][!!my](dst_v, dst_stride, ref_v, 80, bh, mx, my);
     } else {
-        mc[!!mx][!!my](dst_u + off, dst_stride, ref_u, src_stride_u, bh, mx, my);
-        mc[!!mx][!!my](dst_v + off, dst_stride, ref_v, src_stride_v, bh, mx, my);
+        mc[!!mx][!!my](dst_u, dst_stride, ref_u, src_stride_u, bh, mx, my);
+        mc[!!mx][!!my](dst_v, dst_stride, ref_v, src_stride_v, bh, mx, my);
     }
 }
 
-static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
-                        ptrdiff_t yoff, ptrdiff_t uvoff)
+static void inter_recon(AVCodecContext *ctx)
 {
-    VP9Context *s = ctx->priv_data;
     static const uint8_t bwlog_tab[2][N_BS_SIZES] = {
         { 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4 },
         { 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 4 },
     };
+    VP9Context *s = ctx->priv_data;
+    VP9Block *const b = &s->b;
+    int row = b->row, col = b->col;
     AVFrame *ref1 = s->refs[s->refidx[b->ref[0]]];
     AVFrame *ref2 = b->comp ? s->refs[s->refidx[b->ref[1]]] : NULL;
     int w = ctx->width, h = ctx->height;
-    ptrdiff_t ls_y = s->f->linesize[0], ls_uv = s->f->linesize[1];
+    ptrdiff_t ls_y = b->y_stride, ls_uv = b->uv_stride;
 
     // y inter pred
     if (b->bs > BS_8x8) {
         if (b->bs == BS_8x4) {
-            mc_luma_dir(s, s->dsp.mc[3][b->filter][0], s->f->data[0], ls_y,
-                        yoff, ref1->data[0], ref1->linesize[0],
+            mc_luma_dir(s, s->dsp.mc[3][b->filter][0], b->dst[0], ls_y,
+                        ref1->data[0], ref1->linesize[0],
                         row << 3, col << 3, &b->mv[0][0], 8, 4, w, h);
             mc_luma_dir(s, s->dsp.mc[3][b->filter][0],
-                        s->f->data[0] + 4 * ls_y, ls_y, yoff,
+                        b->dst[0] + 4 * ls_y, ls_y,
                         ref1->data[0], ref1->linesize[0],
                         (row << 3) + 4, col << 3, &b->mv[2][0], 8, 4, w, h);
 
             if (b->comp) {
-                mc_luma_dir(s, s->dsp.mc[3][b->filter][1], s->f->data[0], ls_y,
-                            yoff, ref2->data[0], ref2->linesize[0],
+                mc_luma_dir(s, s->dsp.mc[3][b->filter][1], b->dst[0], ls_y,
+                            ref2->data[0], ref2->linesize[0],
                             row << 3, col << 3, &b->mv[0][1], 8, 4, w, h);
                 mc_luma_dir(s, s->dsp.mc[3][b->filter][1],
-                            s->f->data[0] + 4 * ls_y, ls_y, yoff,
+                            b->dst[0] + 4 * ls_y, ls_y,
                             ref2->data[0], ref2->linesize[0],
                             (row << 3) + 4, col << 3, &b->mv[2][1], 8, 4, w, h);
             }
         } else if (b->bs == BS_4x8) {
-            mc_luma_dir(s, s->dsp.mc[4][b->filter][0], s->f->data[0], ls_y,
-                        yoff, ref1->data[0], ref1->linesize[0],
+            mc_luma_dir(s, s->dsp.mc[4][b->filter][0], b->dst[0], ls_y,
+                        ref1->data[0], ref1->linesize[0],
                         row << 3, col << 3, &b->mv[0][0], 4, 8, w, h);
-            mc_luma_dir(s, s->dsp.mc[4][b->filter][0], s->f->data[0] + 4, ls_y,
-                        yoff, ref1->data[0], ref1->linesize[0],
+            mc_luma_dir(s, s->dsp.mc[4][b->filter][0], b->dst[0] + 4, ls_y,
+                        ref1->data[0], ref1->linesize[0],
                         row << 3, (col << 3) + 4, &b->mv[1][0], 4, 8, w, h);
 
             if (b->comp) {
-                mc_luma_dir(s, s->dsp.mc[4][b->filter][1], s->f->data[0], ls_y,
-                            yoff, ref2->data[0], ref2->linesize[0],
+                mc_luma_dir(s, s->dsp.mc[4][b->filter][1], b->dst[0], ls_y,
+                            ref2->data[0], ref2->linesize[0],
                             row << 3, col << 3, &b->mv[0][1], 4, 8, w, h);
-                mc_luma_dir(s, s->dsp.mc[4][b->filter][1], s->f->data[0] + 4, ls_y,
-                            yoff, ref2->data[0], ref2->linesize[0],
+                mc_luma_dir(s, s->dsp.mc[4][b->filter][1], b->dst[0] + 4, ls_y,
+                            ref2->data[0], ref2->linesize[0],
                             row << 3, (col << 3) + 4, &b->mv[1][1], 4, 8, w, h);
             }
         } else {
@@ -2277,35 +2306,35 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
 
             // FIXME if two horizontally adjacent blocks have the same MV,
             // do a w8 instead of a w4 call
-            mc_luma_dir(s, s->dsp.mc[4][b->filter][0], s->f->data[0], ls_y,
-                        yoff, ref1->data[0], ref1->linesize[0],
+            mc_luma_dir(s, s->dsp.mc[4][b->filter][0], b->dst[0], ls_y,
+                        ref1->data[0], ref1->linesize[0],
                         row << 3, col << 3, &b->mv[0][0], 4, 4, w, h);
-            mc_luma_dir(s, s->dsp.mc[4][b->filter][0], s->f->data[0] + 4, ls_y,
-                        yoff, ref1->data[0], ref1->linesize[0],
+            mc_luma_dir(s, s->dsp.mc[4][b->filter][0], b->dst[0] + 4, ls_y,
+                        ref1->data[0], ref1->linesize[0],
                         row << 3, (col << 3) + 4, &b->mv[1][0], 4, 4, w, h);
             mc_luma_dir(s, s->dsp.mc[4][b->filter][0],
-                        s->f->data[0] + 4 * ls_y, ls_y,
-                        yoff, ref1->data[0], ref1->linesize[0],
+                        b->dst[0] + 4 * ls_y, ls_y,
+                        ref1->data[0], ref1->linesize[0],
                         (row << 3) + 4, col << 3, &b->mv[2][0], 4, 4, w, h);
             mc_luma_dir(s, s->dsp.mc[3][b->filter][0],
-                        s->f->data[0] + 4 * ls_y + 4, ls_y,
-                        yoff, ref1->data[0], ref1->linesize[0],
+                        b->dst[0] + 4 * ls_y + 4, ls_y,
+                        ref1->data[0], ref1->linesize[0],
                         (row << 3) + 4, (col << 3) + 4, &b->mv[3][0], 4, 4, w, h);
 
             if (b->comp) {
-                mc_luma_dir(s, s->dsp.mc[4][b->filter][1], s->f->data[0], ls_y,
-                            yoff, ref2->data[0], ref2->linesize[0],
+                mc_luma_dir(s, s->dsp.mc[4][b->filter][1], b->dst[0], ls_y,
+                            ref2->data[0], ref2->linesize[0],
                             row << 3, col << 3, &b->mv[0][1], 4, 4, w, h);
-                mc_luma_dir(s, s->dsp.mc[4][b->filter][1], s->f->data[0] + 4, ls_y,
-                            yoff, ref2->data[0], ref2->linesize[0],
+                mc_luma_dir(s, s->dsp.mc[4][b->filter][1], b->dst[0] + 4, ls_y,
+                            ref2->data[0], ref2->linesize[0],
                             row << 3, (col << 3) + 4, &b->mv[1][1], 4, 4, w, h);
                 mc_luma_dir(s, s->dsp.mc[4][b->filter][1],
-                            s->f->data[0] + 4 * ls_y, ls_y,
-                            yoff, ref2->data[0], ref2->linesize[0],
+                            b->dst[0] + 4 * ls_y, ls_y,
+                            ref2->data[0], ref2->linesize[0],
                             (row << 3) + 4, col << 3, &b->mv[2][1], 4, 4, w, h);
                 mc_luma_dir(s, s->dsp.mc[3][b->filter][1],
-                            s->f->data[0] + 4 * ls_y + 4, ls_y,
-                            yoff, ref2->data[0], ref2->linesize[0],
+                            b->dst[0] + 4 * ls_y + 4, ls_y,
+                            ref2->data[0], ref2->linesize[0],
                             (row << 3) + 4, (col << 3) + 4, &b->mv[3][1], 4, 4, w, h);
             }
         }
@@ -2313,13 +2342,13 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
         int bwl = bwlog_tab[0][b->bs];
         int bw = bwh_tab[0][b->bs][0] * 4, bh = bwh_tab[0][b->bs][1] * 4;
 
-        mc_luma_dir(s, s->dsp.mc[bwl][b->filter][0], s->f->data[0], ls_y,
-                    yoff, ref1->data[0], ref1->linesize[0],
+        mc_luma_dir(s, s->dsp.mc[bwl][b->filter][0], b->dst[0], ls_y,
+                    ref1->data[0], ref1->linesize[0],
                     row << 3, col << 3, &b->mv[0][0],bw, bh, w, h);
 
         if (b->comp)
-            mc_luma_dir(s, s->dsp.mc[bwl][b->filter][1], s->f->data[0], ls_y,
-                        yoff, ref2->data[0], ref2->linesize[0],
+            mc_luma_dir(s, s->dsp.mc[bwl][b->filter][1], b->dst[0], ls_y,
+                        ref2->data[0], ref2->linesize[0],
                         row << 3, col << 3, &b->mv[0][1], bw, bh, w, h);
     }
 
@@ -2339,7 +2368,7 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
         }
 
         mc_chroma_dir(s, s->dsp.mc[bwl][b->filter][0],
-                      s->f->data[1], s->f->data[2], ls_uv, uvoff,
+                      b->dst[1], b->dst[2], ls_uv,
                       ref1->data[1], ref1->linesize[1],
                       ref1->data[2], ref1->linesize[2],
                       row << 2, col << 2, &mvuv, bw, bh, w, h);
@@ -2352,7 +2381,7 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
                 mvuv = b->mv[0][1];
             }
             mc_chroma_dir(s, s->dsp.mc[bwl][b->filter][1],
-                          s->f->data[1], s->f->data[2], ls_uv, uvoff,
+                          b->dst[1], b->dst[2], ls_uv,
                           ref2->data[1], ref2->linesize[1],
                           ref2->data[2], ref2->linesize[2],
                           row << 2, col << 2, &mvuv, bw, bh, w, h);
@@ -2368,7 +2397,7 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
         int end_y = FFMIN(2 * (s->rows - row), h4);
         int tx = 4 * s->lossless + b->tx, uvtx = b->uvtx + 4 * s->lossless;
         int uvstep1d = 1 << b->uvtx, p;
-        uint8_t *dst = s->f->data[0] + yoff;
+        uint8_t *dst = b->dst[0];
 
         // y itxfm add
         for (n = 0, y = 0; y < end_y; y += step1d) {
@@ -2377,10 +2406,10 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
                 int eob = b->tx > TX_8X8 ? AV_RN16A(&s->eob[n]) : s->eob[n];
 
                 if (eob)
-                    s->dsp.itxfm_add[tx][DCT_DCT](ptr, s->f->linesize[0],
+                    s->dsp.itxfm_add[tx][DCT_DCT](ptr, b->y_stride,
                                                   s->block + 16 * n, eob);
             }
-            dst += 4 * s->f->linesize[0] * step1d;
+            dst += 4 * b->y_stride * step1d;
         }
 
         // uv itxfm add
@@ -2390,17 +2419,17 @@ static void inter_recon(AVCodecContext *ctx, VP9Block *b, int row, int col,
         end_y >>= 1;
         step = 1 << (b->uvtx * 2);
         for (p = 0; p < 2; p++) {
-            dst = s->f->data[1 + p] + uvoff;
+            dst = b->dst[p + 1];
             for (n = 0, y = 0; y < end_y; y += uvstep1d) {
                 uint8_t *ptr = dst;
                 for (x = 0; x < end_x; x += uvstep1d, ptr += 4 * uvstep1d, n += step) {
                     int eob = b->uvtx > TX_8X8 ? AV_RN16A(&s->uveob[p][n]) : s->uveob[p][n];
 
                     if (eob)
-                        s->dsp.itxfm_add[uvtx][DCT_DCT](ptr, s->f->linesize[1],
+                        s->dsp.itxfm_add[uvtx][DCT_DCT](ptr, b->uv_stride,
                                                         s->uvblock[p] + 16 * n, eob);
                 }
-                dst += 4 * uvstep1d * s->f->linesize[1];
+                dst += 4 * uvstep1d * b->uv_stride;
             }
         }
     }
@@ -2543,21 +2572,26 @@ static int decode_b(AVCodecContext *ctx, int row, int col,
                     enum BlockLevel bl, enum BlockPartition bp)
 {
     VP9Context *s = ctx->priv_data;
+    VP9Block *const b = &s->b;
     enum BlockSize bs = bl * 3 + bp;
-    VP9Block b;
     int res, y, w4 = bwh_tab[1][bs][0], h4 = bwh_tab[1][bs][1], lvl;
+    int emu[2];
 
+    b->row = row;
+    b->row7 = row & 7;
+    b->col = col;
+    b->col7 = col & 7;
     s->min_mv.x = -(128 + col * 64);
     s->min_mv.y = -(128 + row * 64);
     s->max_mv.x = 128 + (s->cols - col - w4) * 64;
     s->max_mv.y = 128 + (s->rows - row - h4) * 64;
-    b.bs = bs;
-    if ((res = decode_mode(ctx, row, col, &b)) < 0)
+    b->bs = bs;
+    if ((res = decode_mode(ctx)) < 0)
         return res;
-    b.uvtx = b.tx - (w4 * 2 == (1 << b.tx) || h4 * 2 == (1 << b.tx));
+    b->uvtx = b->tx - (w4 * 2 == (1 << b->tx) || h4 * 2 == (1 << b->tx));
 
-    if (!b.skip) {
-        if ((res = decode_coeffs(ctx, &b, row, col)) < 0)
+    if (!b->skip) {
+        if ((res = decode_coeffs(ctx)) < 0)
             return res;
     } else {
         int pl;
@@ -2569,26 +2603,80 @@ static int decode_b(AVCodecContext *ctx, int row, int col,
             memset(&s->left_uv_nnz_ctx[pl][row & 7], 0, h4);
         }
     }
-    if (b.intra) {
-        intra_recon(ctx, &b, row, col, yoff, uvoff);
+
+    // emulated overhangs if the stride of the target buffer can't hold. This
+    // allows to support emu-edge and so on even if we have large block
+    // overhangs
+    emu[0] = (col + w4) * 8 > s->f->linesize[0] ||
+             (row + h4) > s->rows + 2 * !(ctx->flags & CODEC_FLAG_EMU_EDGE);
+    emu[1] = (col + w4) * 4 > s->f->linesize[1] ||
+             (row + h4) > s->rows + 2 * !(ctx->flags & CODEC_FLAG_EMU_EDGE);
+    if (emu[0]) {
+        b->dst[0] = s->tmp_y;
+        b->y_stride = 64;
     } else {
-        inter_recon(ctx, &b, row, col, yoff, uvoff);
+        b->dst[0] = s->f->data[0] + yoff;
+        b->y_stride = s->f->linesize[0];
+    }
+    if (emu[1]) {
+        b->dst[1] = s->tmp_uv[0];
+        b->dst[2] = s->tmp_uv[1];
+        b->uv_stride = 32;
+    } else {
+        b->dst[1] = s->f->data[1] + uvoff;
+        b->dst[2] = s->f->data[2] + uvoff;
+        b->uv_stride = s->f->linesize[1];
+    }
+    if (b->intra) {
+        intra_recon(ctx, yoff, uvoff);
+    } else {
+        inter_recon(ctx);
+    }
+    if (emu[0]) {
+        int w = FFMIN(s->cols - col, w4) * 8, h = FFMIN(s->rows - row, h4) * 8, n, o = 0;
+
+        for (n = 0; o < w; n++) {
+            int bw = 64 >> n;
+
+            assert(n <= 4);
+            if (w & bw) {
+                s->dsp.mc[n][0][0][0][0](s->f->data[0] + yoff + o, s->f->linesize[0],
+                                         s->tmp_y + o, 64, h, 0, 0);
+                o += bw;
+            }
+        }
+    }
+    if (emu[1]) {
+        int w = FFMIN(s->cols - col, w4) * 4, h = FFMIN(s->rows - row, h4) * 4, n, o = 0;
+
+        for (n = 1; o < w; n++) {
+            int bw = 64 >> n;
+
+            assert(n <= 4);
+            if (w & bw) {
+                s->dsp.mc[n][0][0][0][0](s->f->data[1] + uvoff + o, s->f->linesize[1],
+                                         s->tmp_uv[0] + o, 32, h, 0, 0);
+                s->dsp.mc[n][0][0][0][0](s->f->data[2] + uvoff + o, s->f->linesize[2],
+                                         s->tmp_uv[1] + o, 32, h, 0, 0);
+                o += bw;
+            }
+        }
     }
 
     // pick filter level and find edges to apply filter to
     if (s->filter.level &&
-        (lvl = s->segmentation.feat[b.seg_id].lflvl[b.intra ? 0 : b.ref[0] + 1]
-                                                   [b.mode[3] != ZEROMV]) > 0) {
+        (lvl = s->segmentation.feat[b->seg_id].lflvl[b->intra ? 0 : b->ref[0] + 1]
+                                                    [b->mode[3] != ZEROMV]) > 0) {
         int x_end = FFMIN(s->cols - col, w4), y_end = FFMIN(s->rows - row, h4);
-        int skip_inter = !b.intra && b.skip;
+        int skip_inter = !b->intra && b->skip;
 
         for (y = 0; y < h4; y++)
             memset(&lflvl->level[((row & 7) + y) * 8 + (col & 7)], lvl, w4);
-        mask_edges(lflvl, 0, row & 7, col & 7, x_end, y_end, 0, 0, b.tx, skip_inter);
+        mask_edges(lflvl, 0, row & 7, col & 7, x_end, y_end, 0, 0, b->tx, skip_inter);
         mask_edges(lflvl, 1, row & 7, col & 7, x_end, y_end,
                    s->cols & 1 && col + w4 >= s->cols ? s->cols & 7 : 0,
                    s->rows & 1 && row + h4 >= s->rows ? s->rows & 7 : 0,
-                   b.uvtx, skip_inter);
+                   b->uvtx, skip_inter);
 
         if (!s->filter.lim_lut[lvl]) {
             int sharp = s->filter.sharpness;
