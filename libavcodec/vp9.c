@@ -198,7 +198,7 @@ typedef struct VP9Context {
     uint8_t *segmentation_map;
     struct mv_storage *mv[2];
     struct VP9Filter *lflvl;
-    uint8_t *edge_emu_buffer;
+    DECLARE_ALIGNED(16, uint8_t, edge_emu_buffer)[71*80];
 
     DECLARE_ALIGNED(16, int16_t, block)[4096];
     uint8_t eob[256];
@@ -241,7 +241,6 @@ static int update_size(AVCodecContext *ctx, int w, int h)
     s->mv[0] = av_malloc(sizeof(*s->mv[0]) * s->sb_cols * s->sb_rows * 64);
     s->mv[1] = av_malloc(sizeof(*s->mv[1]) * s->sb_cols * s->sb_rows * 64);
     s->lflvl = av_malloc(sizeof(*s->lflvl) * s->sb_cols);
-    av_freep(&s->edge_emu_buffer);
 
     return 0;
 }
@@ -2175,12 +2174,13 @@ static av_always_inline void mc_luma_dir(VP9Context *s, vp9_mc_func (*mc)[2],
     // FIXME bilinear filter only needs 0/1 pixels, not 3/4
     if (x < !!mx * 3 || y < !!my * 3 ||
         x + !!mx * 4 > w - bw || y + !!my * 4 > h - bh) {
-        s->vdsp.emulated_edge_mc(s->edge_emu_buffer,
+        s->vdsp.emulated_edge_mc(s->edge_emu_buffer, 80,
                                  ref - !!my * 3 * ref_stride - !!mx * 3,
                                  ref_stride,
                                  bw + !!mx * 7, bh + !!my * 7,
                                  x - !!mx * 3, y - !!my * 3, w, h);
-        ref = s->edge_emu_buffer + !!my * 3 * ref_stride + !!mx * 3;
+        ref = s->edge_emu_buffer + !!my * 3 * 80 + !!mx * 3;
+        ref_stride = 80;
     }
     mc[!!mx][!!my](dst + off, dst_stride, ref, ref_stride, bh, mx << 1, my << 1);
 }
@@ -2204,19 +2204,19 @@ static av_always_inline void mc_chroma_dir(VP9Context *s, vp9_mc_func (*mc)[2],
     // FIXME bilinear filter only needs 0/1 pixels, not 3/4
     if (x < !!mx * 3 || y < !!my * 3 ||
         x + !!mx * 4 > w - bw || y + !!my * 4 > h - bh) {
-        s->vdsp.emulated_edge_mc(s->edge_emu_buffer,
+        s->vdsp.emulated_edge_mc(s->edge_emu_buffer, 80,
                                  ref_u - !!my * 3 * src_stride_u - !!mx * 3, src_stride_u,
                                  bw + !!mx * 7, bh + !!my * 7,
                                  x - !!mx * 3, y - !!my * 3, w, h);
-        ref_u = s->edge_emu_buffer + !!my * 3 * src_stride_u + !!mx * 3;
-        mc[!!mx][!!my](dst_u + off, dst_stride, ref_u, src_stride_u, bh, mx, my);
+        ref_u = s->edge_emu_buffer + !!my * 3 * 80 + !!mx * 3;
+        mc[!!mx][!!my](dst_u + off, dst_stride, ref_u, 80, bh, mx, my);
 
-        s->vdsp.emulated_edge_mc(s->edge_emu_buffer,
+        s->vdsp.emulated_edge_mc(s->edge_emu_buffer, 80,
                                  ref_v - !!my * 3 * src_stride_v - !!mx * 3, src_stride_v,
                                  bw + !!mx * 7, bh + !!my * 7,
                                  x - !!mx * 3, y - !!my * 3, w, h);
-        ref_v = s->edge_emu_buffer + !!my * 3 * src_stride_v + !!mx * 3;
-        mc[!!mx][!!my](dst_v + off, dst_stride, ref_v, src_stride_v, bh, mx, my);
+        ref_v = s->edge_emu_buffer + !!my * 3 * 80 + !!mx * 3;
+        mc[!!mx][!!my](dst_v + off, dst_stride, ref_v, 80, bh, mx, my);
     } else {
         mc[!!mx][!!my](dst_u + off, dst_stride, ref_u, src_stride_u, bh, mx, my);
         mc[!!mx][!!my](dst_v + off, dst_stride, ref_v, src_stride_v, bh, mx, my);
@@ -3193,10 +3193,6 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
                              s->refreshrefmask ? AV_GET_BUFFER_FLAG_REF : 0)) < 0)
         return res;
 
-    if (!s->edge_emu_buffer &&
-        !(s->edge_emu_buffer = av_malloc(s->f->linesize[0] * 71)))
-        return AVERROR(ENOMEM);
-
     // main tile decode loop
     memset(s->above_partition_ctx, 0, s->cols);
     memset(s->above_skip_ctx, 0, s->cols);
@@ -3424,7 +3420,6 @@ static int vp9_decode_free(AVCodecContext *ctx)
     av_freep(&s->mv[0]);
     av_freep(&s->mv[1]);
     av_freep(&s->lflvl);
-    av_freep(&s->edge_emu_buffer);
 
     return 0;
 }
