@@ -2316,7 +2316,7 @@ static void inter_recon(AVCodecContext *ctx)
                         b->dst[0] + 4 * ls_y, ls_y,
                         ref1->data[0], ref1->linesize[0],
                         (row << 3) + 4, col << 3, &b->mv[2][0], 4, 4, w, h);
-            mc_luma_dir(s, s->dsp.mc[3][b->filter][0],
+            mc_luma_dir(s, s->dsp.mc[4][b->filter][0],
                         b->dst[0] + 4 * ls_y + 4, ls_y,
                         ref1->data[0], ref1->linesize[0],
                         (row << 3) + 4, (col << 3) + 4, &b->mv[3][0], 4, 4, w, h);
@@ -2332,7 +2332,7 @@ static void inter_recon(AVCodecContext *ctx)
                             b->dst[0] + 4 * ls_y, ls_y,
                             ref2->data[0], ref2->linesize[0],
                             (row << 3) + 4, col << 3, &b->mv[2][1], 4, 4, w, h);
-                mc_luma_dir(s, s->dsp.mc[3][b->filter][1],
+                mc_luma_dir(s, s->dsp.mc[4][b->filter][1],
                             b->dst[0] + 4 * ls_y + 4, ls_y,
                             ref2->data[0], ref2->linesize[0],
                             (row << 3) + 4, (col << 3) + 4, &b->mv[3][1], 4, 4, w, h);
