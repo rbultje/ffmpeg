@@ -2040,7 +2040,7 @@ static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **
     assert(mode >= 0 && mode < 10);
     mode = mode_conv[mode][have_left][have_top];
     if (edges[mode].needs_top) {
-        uint8_t *top;
+        uint8_t *top, *topleft;
         int n_px_need = 4 << tx, n_px_have = (((s->cols - col) << !p) - x) * 4;
         int n_px_need_tr = 0;
 
@@ -2050,13 +2050,19 @@ static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **
         // if top of sb64-row, use s->intra_pred_data[] instead of
         // dst[-stride] for intra prediction (it contains pre- instead of
         // post-loopfilter data)
-        if (have_top)
+        if (have_top) {
             top = !(row & 7) && !y ?
                 s->intra_pred_data[p] + col * (8 >> !!p) + x * 4 :
                 y == 0 ? &dst_edge[-stride_edge] : &dst_inner[-stride_inner];
+            if (have_left)
+                topleft = !(row & 7) && !y ?
+                    s->intra_pred_data[p] + col * (8 >> !!p) + x * 4 :
+                    y == 0 || x == 0 ? &dst_edge[-stride_edge] :
+                    &dst_inner[-stride_inner];
+        }
 
         if (have_top &&
-            (!edges[mode].needs_topleft || have_left) &&
+            (!edges[mode].needs_topleft || (have_left && top == topleft)) &&
             (tx != TX_4X4 || !edges[mode].needs_topright || have_right) &&
             n_px_need + n_px_need_tr <= n_px_have) {
             *a = top;
@@ -2074,7 +2080,7 @@ static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **
             }
             if (edges[mode].needs_topleft) {
                 if (have_left && have_top) {
-                    (*a)[-1] = top[-1];
+                    (*a)[-1] = topleft[-1];
                 } else {
                     (*a)[-1] = have_top ? 129 : 127;
                 }
@@ -2949,7 +2955,6 @@ static void loopfilter_sb(AVCodecContext *ctx, struct VP9Filter *lflvl,
                         int L = l[16], H = L >> 4;
                         int E = s->filter.mblim_lut[L], I = s->filter.lim_lut[L];
 
-                        assert(!(hmask2[1] & x));
                         s->dsp.loop_filter[!!(hmask2[1] & x)]
                                           [0](ptr + 8 * ls_uv, ls_uv, E, I, H);
                     }
