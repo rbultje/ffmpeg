@@ -67,9 +67,17 @@ typedef struct VP9DSPContext {
      * dimension 1: width of filter (0=4, 1=8, 2=16)
      * dimension 2: 0=col-edge filter (h), 1=row-edge filter (v)
      *
-     * dst/stride are aligned by operation size (8 for 4wd/8wd, 16 for 16wd)
+     * dst/stride are aligned by 8
      */
-    void (*loop_filter[3][2])(uint8_t *dst, ptrdiff_t stride,
+    void (*loop_filter_8[3][2])(uint8_t *dst, ptrdiff_t stride,
+                                int mb_lim, int lim, int hev_thr);
+
+    /*
+     * dimension 1: 0=col-edge filter (h), 1=row-edge filter (v)
+     *
+     * The width of filter is assumed to be 16; dst/stride are aligned by 16
+     */
+    void (*loop_filter_16[2])(uint8_t *dst, ptrdiff_t stride,
                               int mb_lim, int lim, int hev_thr);
 
     /*

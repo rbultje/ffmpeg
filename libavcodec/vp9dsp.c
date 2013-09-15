@@ -1463,11 +1463,11 @@ static void vp9dsp_itxfm_init(VP9DSPContext *dsp)
 static av_always_inline void loop_filter(uint8_t *dst,  ptrdiff_t stride,
                                          int E, int I, int H,
                                          ptrdiff_t stridea, ptrdiff_t strideb,
-                                         int wd, int sz)
+                                         int wd)
 {
     int i;
 
-    for (i = 0; i < sz; i++, dst += stridea) {
+    for (i = 0; i < 8; i++, dst += stridea) {
         int p7, p6, p5, p4;
         int p3 = dst[strideb * -4], p2 = dst[strideb * -3];
         int p1 = dst[strideb * -2], p0 = dst[strideb * -1];
@@ -1568,24 +1568,38 @@ static av_always_inline void loop_filter(uint8_t *dst,  ptrdiff_t stride,
     }
 }
 
-#define lf_fn(dir, wd, sz, stridea, strideb) \
-static void loop_filter_##dir##_##wd##_##sz##_c(uint8_t *dst, \
-                                                ptrdiff_t stride, \
-                                                int E, int I, int H) \
+#define lf_8_fn(dir, wd, stridea, strideb) \
+static void loop_filter_##dir##_##wd##_8_c(uint8_t *dst, \
+                                           ptrdiff_t stride, \
+                                           int E, int I, int H) \
 { \
-    loop_filter(dst, stride, E, I, H, stridea, strideb, wd, sz); \
+    loop_filter(dst, stride, E, I, H, stridea, strideb, wd); \
 }
 
-#define lf_fns(wd, sz) \
-lf_fn(h, wd, sz, stride, 1) \
-lf_fn(v, wd, sz, 1, stride)
+#define lf_8_fns(wd) \
+lf_8_fn(h, wd, stride, 1) \
+lf_8_fn(v, wd, 1, stride)
 
-lf_fns(4, 8)
-lf_fns(8, 8)
-lf_fns(16, 16)
+lf_8_fns(4)
+lf_8_fns(8)
+lf_8_fns(16)
 
-#undef lf_fn
-#undef lf_fns
+#undef lf_8_fn
+#undef lf_8_fns
+
+#define lf_16_fn(dir, stridea) \
+static void loop_filter_##dir##_16_16_c(uint8_t *dst, \
+                                        ptrdiff_t stride, \
+                                        int E, int I, int H) \
+{ \
+    loop_filter_##dir##_16_8_c(dst, stride, E, I, H); \
+    loop_filter_##dir##_16_8_c(dst + 8 * stridea, stride, E, I, H); \
+}
+
+lf_16_fn(h, stride)
+lf_16_fn(v, 1)
+
+#undef lf_16_fn
 
 #define lf_mix_fn(dir, wd1, wd2, stridea) \
 static void loop_filter_##dir##_##wd1##wd2##_16_c(uint8_t *dst, \
@@ -1610,12 +1624,15 @@ lf_mix_fns(8, 8)
 
 static void vp9dsp_loopfilter_init(VP9DSPContext *dsp)
 {
-    dsp->loop_filter[0][0] = loop_filter_h_4_8_c;
-    dsp->loop_filter[0][1] = loop_filter_v_4_8_c;
-    dsp->loop_filter[1][0] = loop_filter_h_8_8_c;
-    dsp->loop_filter[1][1] = loop_filter_v_8_8_c;
-    dsp->loop_filter[2][0] = loop_filter_h_16_16_c;
-    dsp->loop_filter[2][1] = loop_filter_v_16_16_c;
+    dsp->loop_filter_8[0][0] = loop_filter_h_4_8_c;
+    dsp->loop_filter_8[0][1] = loop_filter_v_4_8_c;
+    dsp->loop_filter_8[1][0] = loop_filter_h_8_8_c;
+    dsp->loop_filter_8[1][1] = loop_filter_v_8_8_c;
+    dsp->loop_filter_8[2][0] = loop_filter_h_16_8_c;
+    dsp->loop_filter_8[2][1] = loop_filter_v_16_8_c;
+
+    dsp->loop_filter_16[0] = loop_filter_h_16_16_c;
+    dsp->loop_filter_16[1] = loop_filter_v_16_16_c;
 
     dsp->loop_filter_mix2[0][0][0] = loop_filter_h_44_16_c;
     dsp->loop_filter_mix2[0][0][1] = loop_filter_v_44_16_c;
