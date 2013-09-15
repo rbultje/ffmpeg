@@ -3497,7 +3497,7 @@ static void vp9_decode_flush(AVCodecContext *ctx)
     s->f = NULL;
 }
 
-static int vp9_decode_init(AVCodecContext *ctx)
+static av_cold int vp9_decode_init(AVCodecContext *ctx)
 {
     VP9Context *s = ctx->priv_data;
     int i;
@@ -3515,7 +3515,7 @@ static int vp9_decode_init(AVCodecContext *ctx)
     return 0;
 }
 
-static int vp9_decode_free(AVCodecContext *ctx)
+static av_cold int vp9_decode_free(AVCodecContext *ctx)
 {
     VP9Context *s = ctx->priv_data;
     int i;
