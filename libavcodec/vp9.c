@@ -3298,6 +3298,8 @@ static int vp9_decode_frame(AVCodecContext *ctx, void *out_pic,
     if ((res = ff_get_buffer(ctx, s->f,
                              s->refreshrefmask ? AV_GET_BUFFER_FLAG_REF : 0)) < 0)
         return res;
+    s->f->key_frame = s->keyframe;
+    s->f->pict_type = s->keyframe ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_P;
 
     // main tile decode loop
     memset(s->above_partition_ctx, 0, s->cols);
@@ -3484,7 +3486,15 @@ static int vp9_decode_packet(AVCodecContext *avctx, void *out_pic,
 
 static void vp9_decode_flush(AVCodecContext *ctx)
 {
-    printf("flush\n");
+    VP9Context *s = ctx->priv_data;
+    int i;
+
+    for (i = 0; i < 10; i++)
+        if (s->fb[i]->data[0])
+            av_frame_unref(s->fb[i]);
+    for (i = 0; i < 8; i++)
+        s->refs[i] = NULL;
+    s->f = NULL;
 }
 
 static int vp9_decode_init(AVCodecContext *ctx)
