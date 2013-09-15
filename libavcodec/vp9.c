@@ -332,7 +332,7 @@ static int decode_frame_header(AVCodecContext *ctx,
         return AVERROR_INVALIDDATA;
     if (get_bits1(&s->gb)) {
         int ref = get_bits(&s->gb, 3);
-        printf("Directly show frame %d\n", ref);
+        av_log(ctx, AV_LOG_ERROR, "Directly show frame %d\n", ref);
         return -1;
     }
     s->last_keyframe = s->keyframe;
