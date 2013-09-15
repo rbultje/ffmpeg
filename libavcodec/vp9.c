@@ -2540,7 +2540,8 @@ static av_always_inline void mask_edges(struct VP9Filter *lflvl, int is_uv,
             if (is_uv && tx > TX_8X8 && (h ^ (h - 1)) == 1) {
                 for (y = row_and_7; y < h + row_and_7 - 1; y += step1d)
                     lflvl->mask[is_uv][1][y][0] |= m_col;
-                lflvl->mask[is_uv][1][y][1] |= m_col;
+                if (y - row_and_7 == h - 1)
+                    lflvl->mask[is_uv][1][y][1] |= m_col;
             } else {
                 for (y = row_and_7; y < h + row_and_7; y += step1d)
                     lflvl->mask[is_uv][1][y][mask_id] |= m_col;
