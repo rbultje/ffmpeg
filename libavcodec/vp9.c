@@ -29,6 +29,7 @@
 #include "vp9.h"
 #include "vp9data.h"
 #include "vp9dsp.h"
+#include "libavutil/avassert.h"
 
 enum CompPredMode {
     PRED_SINGLEREF,
@@ -1311,7 +1312,7 @@ static int decode_mode(AVCodecContext *ctx)
         };
 
         if (s->segmentation.feat[b->seg_id].ref_enabled) {
-            assert(s->segmentation.feat[b->seg_id].ref_val != 0);
+            av_assert2(s->segmentation.feat[b->seg_id].ref_val != 0);
             b->comp = 0;
             b->ref[0] = s->segmentation.feat[b->seg_id].ref_val - 1;
         } else {
@@ -2037,7 +2038,7 @@ static av_always_inline int check_intra_mode(VP9Context *s, int mode, uint8_t **
 
     // FIXME distinguish between dst_edge and dst_inner based on x/y for left/above
 
-    assert(mode >= 0 && mode < 10);
+    av_assert2(mode >= 0 && mode < 10);
     mode = mode_conv[mode][have_left][have_top];
     if (edges[mode].needs_top) {
         uint8_t *top, *topleft;
@@ -2308,7 +2309,7 @@ static void inter_recon(AVCodecContext *ctx)
                             row << 3, (col << 3) + 4, &b->mv[1][1], 4, 8, w, h);
             }
         } else {
-            assert(b->bs == BS_4x4);
+            av_assert2(b->bs == BS_4x4);
 
             // FIXME if two horizontally adjacent blocks have the same MV,
             // do a w8 instead of a w4 call
@@ -2645,7 +2646,7 @@ static int decode_b(AVCodecContext *ctx, int row, int col,
         for (n = 0; o < w; n++) {
             int bw = 64 >> n;
 
-            assert(n <= 4);
+            av_assert2(n <= 4);
             if (w & bw) {
                 s->dsp.mc[n][0][0][0][0](s->f->data[0] + yoff + o, s->f->linesize[0],
                                          s->tmp_y + o, 64, h, 0, 0);
@@ -2659,7 +2660,7 @@ static int decode_b(AVCodecContext *ctx, int row, int col,
         for (n = 1; o < w; n++) {
             int bw = 64 >> n;
 
-            assert(n <= 4);
+            av_assert2(n <= 4);
             if (w & bw) {
                 s->dsp.mc[n][0][0][0][0](s->f->data[1] + uvoff + o, s->f->linesize[1],
                                          s->tmp_uv[0] + o, 32, h, 0, 0);
@@ -2813,7 +2814,7 @@ static void loopfilter_sb(AVCodecContext *ctx, struct VP9Filter *lflvl,
                 if (col || x > 1) {
                     if (hmask1[0] & x) {
                         if (hmask2[0] & x) {
-                            assert(l[8] == L);
+                            av_assert2(l[8] == L);
                             s->dsp.loop_filter_16[0](ptr, ls_y, E, I, H);
                         } else {
                             s->dsp.loop_filter_8[2][0](ptr, ls_y, E, I, H);
@@ -2879,7 +2880,7 @@ static void loopfilter_sb(AVCodecContext *ctx, struct VP9Filter *lflvl,
 
                     if (vmask[0] & x) {
                         if (vmask[0] & (x << 1)) {
-                            assert(l[1] == L);
+                            av_assert2(l[1] == L);
                             s->dsp.loop_filter_16[1](ptr, ls_y, E, I, H);
                         } else {
                             s->dsp.loop_filter_8[2][1](ptr, ls_y, E, I, H);
@@ -2944,7 +2945,7 @@ static void loopfilter_sb(AVCodecContext *ctx, struct VP9Filter *lflvl,
 
                         if (hmask1[0] & x) {
                             if (hmask2[0] & x) {
-                                assert(l[16] == L);
+                                av_assert2(l[16] == L);
                                 s->dsp.loop_filter_16[0](ptr, ls_uv, E, I, H);
                             } else {
                                 s->dsp.loop_filter_8[2][0](ptr, ls_uv, E, I, H);
@@ -2987,7 +2988,7 @@ static void loopfilter_sb(AVCodecContext *ctx, struct VP9Filter *lflvl,
 
                         if (vmask[0] & x) {
                             if (vmask[0] & (x << 2)) {
-                                assert(l[2] == L);
+                                av_assert2(l[2] == L);
                                 s->dsp.loop_filter_16[1](ptr, ls_uv, E, I, H);
                             } else {
                                 s->dsp.loop_filter_8[2][1](ptr, ls_uv, E, I, H);
