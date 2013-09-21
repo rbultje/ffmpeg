@@ -143,11 +143,6 @@ static av_always_inline void emulated_edge_mc(uint8_t *dst, ptrdiff_t dst_stride
 
     if(!w || !h)
         return;
-    {
-        int yy;
-        for(yy=0;yy<block_h;yy++)
-            memset(dst+yy*dst_stride, 0, block_w);
-    }
 
     if (src_y >= h) {
         src -= src_y*src_stride;
