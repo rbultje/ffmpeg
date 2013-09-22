@@ -73,7 +73,7 @@ struct VP9Filter {
 };
 
 typedef struct {
-    unsigned seg_id:3, intra:1, comp:1, ref[2], mode[4], uvmode, skip:1;
+    uint8_t seg_id, intra, comp, ref[2], mode[4], uvmode, skip;
     enum FilterMode filter;
     VP56mv mv[4 /* b_idx */][2 /* ref */];
     enum BlockSize bs;
@@ -92,55 +92,55 @@ typedef struct VP9Context {
     VP9Block b;
 
     // bitstream header
-    unsigned profile:2;
-    unsigned keyframe:1, last_keyframe:1;
-    unsigned invisible:1, last_invisible:1;
-    unsigned use_last_frame_mvs:1;
-    unsigned errorres:1;
-    unsigned colorspace:3;
-    unsigned fullrange:1;
-    unsigned intraonly:1;
-    unsigned resetctx:2;
-    unsigned refreshrefmask:8;
-    unsigned highprecisionmvs:1;
-    enum FilterMode filtermode:3;
-    unsigned allowcompinter:1;
-    unsigned fixcompref:2;
-    unsigned refreshctx:1;
-    unsigned parallelmode:1;
-    unsigned framectxid:2;
-    uint8_t refidx[3] /* :3 */;
-    uint8_t signbias[3] /* :1 */;
-    uint8_t varcompref[2] /* :2 */;
+    uint8_t profile;
+    uint8_t keyframe, last_keyframe;
+    uint8_t invisible, last_invisible;
+    uint8_t use_last_frame_mvs;
+    uint8_t errorres;
+    uint8_t colorspace;
+    uint8_t fullrange;
+    uint8_t intraonly;
+    uint8_t resetctx;
+    uint8_t refreshrefmask;
+    uint8_t highprecisionmvs;
+    enum FilterMode filtermode;
+    uint8_t allowcompinter;
+    uint8_t fixcompref;
+    uint8_t refreshctx;
+    uint8_t parallelmode;
+    uint8_t framectxid;
+    uint8_t refidx[3];
+    uint8_t signbias[3];
+    uint8_t varcompref[2];
     AVFrame *refs[8], *f, *fb[10];
 
     struct {
-        unsigned level:6;
+        uint8_t level;
         int8_t sharpness;
         uint8_t lim_lut[64];
         uint8_t mblim_lut[64];
     } filter;
     struct {
-        unsigned enabled:1;
-        int8_t mode[2] /* :6+1 */;
-        int8_t ref[4] /* :6+1 */;
+        uint8_t enabled;
+        int8_t mode[2];
+        int8_t ref[4];
     } lf_delta;
     uint8_t yac_qi;
     int8_t ydc_qdelta, uvdc_qdelta, uvac_qdelta;
-    unsigned lossless:1;
+    uint8_t lossless;
     struct {
-        unsigned enabled:1;
-        unsigned temporal:1;
-        unsigned absolute_vals:1;
-        unsigned update_map:1;
+        uint8_t enabled;
+        uint8_t temporal;
+        uint8_t absolute_vals;
+        uint8_t update_map;
         struct {
-            unsigned q_enabled:1;
-            unsigned lf_enabled:1;
-            unsigned ref_enabled:1;
-            unsigned skip_enabled:1;
-            unsigned ref_val:2;
-            int16_t q_val /* :8+1 */;
-            int8_t lf_val /* :6+1 */;
+            uint8_t q_enabled;
+            uint8_t lf_enabled;
+            uint8_t ref_enabled;
+            uint8_t skip_enabled;
+            uint8_t ref_val;
+            int16_t q_val;
+            int8_t lf_val;
             int16_t qmul[2][2];
             uint8_t lflvl[4][2];
         } feat[8];
@@ -189,8 +189,8 @@ typedef struct VP9Context {
         unsigned coef[4][2][2][6][6][3];
         unsigned eob[4][2][2][6][6][2];
     } counts;
-    enum TxfmMode txfmmode:3;
-    enum CompPredMode comppredmode:2;
+    enum TxfmMode txfmmode;
+    enum CompPredMode comppredmode;
 
     // contextual (left/above) cache
     uint8_t left_partition_ctx[8], *above_partition_ctx;
