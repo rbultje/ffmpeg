@@ -826,7 +826,7 @@ def_hor_up(32)
 
 #undef DST
 
-static void vp9dsp_intrapred_init(VP9DSPContext *dsp)
+static av_cold void vp9dsp_intrapred_init(VP9DSPContext *dsp)
 {
 #define init_intra_pred(tx, sz) \
     dsp->intra_pred[tx][VERT_PRED]            = vert_##sz##_c; \
@@ -1436,7 +1436,7 @@ itxfm_wrapper(iwht, iwht, 4, 0)
 #undef itxfm_wrapper
 #undef itxfm_wrap
 
-static void vp9dsp_itxfm_init(VP9DSPContext *dsp)
+static av_cold void vp9dsp_itxfm_init(VP9DSPContext *dsp)
 {
 #define init_itxfm(tx, sz) \
     dsp->itxfm_add[tx][DCT_DCT]   = idct_idct_##sz##_add_c; \
@@ -1622,7 +1622,7 @@ lf_mix_fns(8, 8)
 #undef lf_mix_fn
 #undef lf_mix_fns
 
-static void vp9dsp_loopfilter_init(VP9DSPContext *dsp)
+static av_cold void vp9dsp_loopfilter_init(VP9DSPContext *dsp)
 {
     dsp->loop_filter_8[0][0] = loop_filter_h_4_8_c;
     dsp->loop_filter_8[0][1] = loop_filter_v_4_8_c;
@@ -1991,7 +1991,7 @@ filter_fn_set(avg)
 #undef bilinf_fn_1d
 #undef bilinf_fn_2d
 
-static void vp9dsp_mc_init(VP9DSPContext *dsp)
+static av_cold void vp9dsp_mc_init(VP9DSPContext *dsp)
 {
 #define init_fpel(idx1, idx2, sz, type) \
     dsp->mc[idx1][FILTER_8TAP_SMOOTH ][idx2][0][0] = type##sz##_c; \
@@ -2038,7 +2038,7 @@ static void vp9dsp_mc_init(VP9DSPContext *dsp)
 #undef init_subpel3
 }
 
-void ff_vp9dsp_init(VP9DSPContext *dsp)
+av_cold void ff_vp9dsp_init(VP9DSPContext *dsp)
 {
     vp9dsp_intrapred_init(dsp);
     vp9dsp_itxfm_init(dsp);
