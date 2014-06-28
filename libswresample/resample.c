@@ -267,6 +267,27 @@ static int set_compensation(ResampleContext *c, int sample_delta, int compensati
     return 0;
 }
 
+#define STOP_TIMER2(id)                                                    \
+    tend = AV_READ_TIME();                                                \
+    {                                                                     \
+        static uint64_t tsum   = 0;                                       \
+        static int tcount      = 0;                                       \
+        static int tskip_count = 0;                                       \
+        uint64_t tdiff = (tend - tstart) / dst_size; \
+        if (tcount < 2                        ||                          \
+            tdiff < 8 * tsum / tcount ||                          \
+            tdiff < 100) {                                       \
+            tsum+= tdiff;                                         \
+            tcount++;                                                     \
+        } else                                                            \
+            tskip_count++;                                                \
+        if (((tcount + tskip_count) & (tcount + tskip_count - 1)) == 0) { \
+            av_log(NULL, AV_LOG_ERROR,                                    \
+                   "%"PRIu64" " FF_TIMER_UNITS "/sample in %s, %d runs, %d skips\n",          \
+                   tsum * 10 / tcount, id, tcount, tskip_count);          \
+        }                                                                 \
+    }
+
 static int swri_resample(ResampleContext *c,
                          uint8_t *dst, const uint8_t *src, int *consumed,
                          int src_size, int dst_size, int update_ctx)
@@ -299,9 +320,13 @@ static int swri_resample(ResampleContext *c,
         dst_size = FFMIN(dst_size, delta_n);
         if (dst_size > 0) {
             if (!c->linear) {
+                START_TIMER
                 *consumed = c->dsp.resample_common[fn_idx](c, dst, src, dst_size, update_ctx);
+                STOP_TIMER2("resample_common");
             } else {
+                START_TIMER
                 *consumed = c->dsp.resample_linear[fn_idx](c, dst, src, dst_size, update_ctx);
+                STOP_TIMER2("resample_linear");
             }
         } else {
             *consumed = 0;
