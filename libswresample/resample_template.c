@@ -45,6 +45,7 @@
 
 #elif    defined(TEMPLATE_RESAMPLE_FLT)
 
+#    define RENAME(N) N ## _float
 #    define FILTER_SHIFT 0
 #    define DELEM  float
 #    define FELEM  float
@@ -52,11 +53,8 @@
 #    define FELEML float
 #    define OUT(d, v) d = v
 
-#    if defined(TEMPLATE_RESAMPLE_FLT)
-#        define RENAME(N) N ## _float
-#    endif
-
 #elif defined(TEMPLATE_RESAMPLE_S32)
+
 #    define RENAME(N) N ## _int32
 #    define FILTER_SHIFT 30
 #    define DELEM  int32_t
@@ -68,10 +66,9 @@
 #    define OUT(d, v) v = (v + (1<<(FILTER_SHIFT-1)))>>FILTER_SHIFT;\
                       d = (uint64_t)(v + 0x80000000) > 0xFFFFFFFF ? (v>>63) ^ 0x7FFFFFFF : v
 
-#elif    defined(TEMPLATE_RESAMPLE_S16)      \
-      || defined(TEMPLATE_RESAMPLE_S16_MMX2) \
-      || defined(TEMPLATE_RESAMPLE_S16_SSE2)
+#elif    defined(TEMPLATE_RESAMPLE_S16)
 
+#    define RENAME(N) N ## _int16
 #    define FILTER_SHIFT 15
 #    define DELEM  int16_t
 #    define FELEM  int16_t
@@ -81,18 +78,6 @@
 #    define FELEM_MIN INT16_MIN
 #    define OUT(d, v) v = (v + (1<<(FILTER_SHIFT-1)))>>FILTER_SHIFT;\
                       d = (unsigned)(v + 32768) > 65535 ? (v>>31) ^ 32767 : v
-
-#    if defined(TEMPLATE_RESAMPLE_S16)
-#        define RENAME(N) N ## _int16
-#    elif defined(TEMPLATE_RESAMPLE_S16_MMX2)
-#        define COMMON_CORE COMMON_CORE_INT16_MMX2
-#        define LINEAR_CORE LINEAR_CORE_INT16_MMX2
-#        define RENAME(N) N ## _int16_mmx2
-#    elif defined(TEMPLATE_RESAMPLE_S16_SSE2)
-#        define COMMON_CORE COMMON_CORE_INT16_SSE2
-#        define LINEAR_CORE LINEAR_CORE_INT16_SSE2
-#        define RENAME(N) N ## _int16_sse2
-#    endif
 
 #endif
 
