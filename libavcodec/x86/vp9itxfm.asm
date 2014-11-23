@@ -66,6 +66,7 @@ pw_15212_m13377: times 4 dw 15212, -13377
 pw_15212_9929: times 4 dw 15212, 9929
 pw_m5283_m15212: times 4 dw -5283, -15212
 pw_13377x2: times 8 dw 13377*2
+pw_13377_m13377: times 4 dw 13377, -13377
 
 pd_8192: times 4 dd 8192
 
@@ -347,7 +348,12 @@ IDCT_4x4_FN ssse3
     movq2dq           xmm1, m1
     movq2dq           xmm2, m2
     movq2dq           xmm3, m3
+%if cpuflag(ssse3)
     paddw               m3, m0
+%else
+    paddw             xmm6, xmm3, xmm0
+    punpcklwd         xmm6, xmm2
+%endif
     punpcklwd         xmm0, xmm1
     punpcklwd         xmm2, xmm3
     pmaddwd           xmm1, xmm0, [pw_5283_13377]
@@ -355,35 +361,57 @@ IDCT_4x4_FN ssse3
     pmaddwd           xmm0, [pw_15212_m13377]
     pmaddwd           xmm3, xmm2, [pw_15212_9929]
     pmaddwd           xmm2, [pw_m5283_m15212]
+%if cpuflag(ssse3)
     psubw               m3, m2
+%else
+    pmaddwd           xmm6, [pw_13377_m13377]
+%endif
     paddd             xmm0, xmm2
-    paddd             xmm3, [pd_8192]
-    paddd             xmm2, [pd_8192]
+    paddd             xmm3, xmm5
+    paddd             xmm2, xmm5
+%if notcpuflag(ssse3)
+    paddd             xmm6, xmm5
+%endif
     paddd             xmm1, xmm3
     paddd             xmm0, xmm3
     paddd             xmm4, xmm2
     psrad             xmm1, 14
     psrad             xmm0, 14
     psrad             xmm4, 14
+%if cpuflag(ssse3)
     pmulhrsw            m3, [pw_13377x2]        ; out2
+%else
+    psrad             xmm6, 14
+%endif
     packssdw          xmm0, xmm0
     packssdw          xmm1, xmm1
     packssdw          xmm4, xmm4
+%if notcpuflag(ssse3)
+    packssdw          xmm6, xmm6
+%endif
     movdq2q             m0, xmm0                ; out3
     movdq2q             m1, xmm1                ; out0
     movdq2q             m2, xmm4                ; out1
+%if notcpuflag(ssse3)
+    movdq2q             m3, xmm6                ; out2
+%endif
     SWAP                 0, 1, 2, 3
 %endmacro
 
 %macro IADST4_FN 5
 INIT_MMX %5
-cglobal vp9_%1_%3_4x4_add, 3, 3, 8, dst, stride, block, eob
+cglobal vp9_%1_%3_4x4_add, 3, 3, 6 + notcpuflag(ssse3), dst, stride, block, eob
+    movdqa            xmm5, [pd_8192]
     mova                m0, [blockq+ 0]
     mova                m1, [blockq+ 8]
     mova                m2, [blockq+16]
     mova                m3, [blockq+24]
+%if cpuflag(ssse3)
     mova                m6, [pw_11585x2]
-    mova                m7, [pd_8192]       ; rounding
+%endif
+%ifnidn %1%3, iadstiadst
+    movdq2q             m7, xmm5
+%endif
     VP9_%2_1D
     TRANSPOSE4x4W  0, 1, 2, 3, 4
     VP9_%4_1D
@@ -395,6 +423,10 @@ cglobal vp9_%1_%3_4x4_add, 3, 3, 8, dst, stride, block, eob
     VP9_IDCT4_WRITEOUT
     RET
 %endmacro
+
+IADST4_FN idct,  IDCT4,  iadst, IADST4, sse2
+IADST4_FN iadst, IADST4, idct,  IDCT4,  sse2
+IADST4_FN iadst, IADST4, iadst, IADST4, sse2
 
 IADST4_FN idct,  IDCT4,  iadst, IADST4, ssse3
 IADST4_FN iadst, IADST4, idct,  IDCT4,  ssse3
