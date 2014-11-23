@@ -448,9 +448,13 @@ IADST4_FN iadst, IADST4, iadst, IADST4, ssse3
 %endmacro
 
 %macro VP9_IDCT8_1D 0
+%if cpuflag(ssse3)
     SUMSUB_BA            w, 8, 0, 4                         ; m8=IN(0)+IN(4) m0=IN(0)-IN(4)
     pmulhrsw            m8, m12                             ; m8=t0a
     pmulhrsw            m0, m12                             ; m0=t1a
+%else
+    VP9_UNPACK_MULSUB_2W_4X 0,  8, 11585, 11585, m7, 4, 5
+%endif
     VP9_UNPACK_MULSUB_2W_4X 2, 10, 15137,  6270, m7, 4, 5   ; m2=t2a, m10=t3a
     VP9_UNPACK_MULSUB_2W_4X 1, 11, 16069,  3196, m7, 4, 5   ; m1=t4a, m11=t7a
     VP9_UNPACK_MULSUB_2W_4X 9,  3,  9102, 13623, m7, 4, 5   ; m9=t5a,  m3=t6a
@@ -458,9 +462,13 @@ IADST4_FN iadst, IADST4, iadst, IADST4, ssse3
     SUMSUB_BA            w,  2,  0, 4                       ;  m2=t1a+t2a (t1),  m0=t1a-t2a (t2)
     SUMSUB_BA            w,  9,  1, 4                       ;  m9=t4a+t5a (t4),  m1=t4a-t5a (t5a)
     SUMSUB_BA            w,  3, 11, 4                       ;  m3=t7a+t6a (t7), m11=t7a-t6a (t6a)
+%if cpuflag(ssse3)
     SUMSUB_BA            w,  1, 11, 4                       ;  m1=t6a+t5a (t6), m11=t6a-t5a (t5)
     pmulhrsw            m1, m12                             ; m1=t6
     pmulhrsw           m11, m12                             ; m11=t5
+%else
+    VP9_UNPACK_MULSUB_2W_4X 11, 1, 11585, 11585, m7, 4, 5
+%endif
     VP9_IDCT8_1D_FINALIZE
 %endmacro
 
@@ -528,6 +536,7 @@ IADST4_FN iadst, IADST4, iadst, IADST4, ssse3
 INIT_XMM %1
 cglobal vp9_idct_idct_8x8_add, 4,4,13, dst, stride, block, eob
 
+%if cpuflag(ssse3)
     mova               m12, [pw_11585x2]    ; often used
 
     cmp eobd, 12 ; top left half or less
@@ -538,15 +547,32 @@ cglobal vp9_idct_idct_8x8_add, 4,4,13, dst, stride, block, eob
 
     cmp eobd, 1 ; faster path for when only DC is set
     jne .idcttopleftcorner
+%else
+    cmp eobd, 1
+    jg .idctfull
+%endif
 
+%if cpuflag(ssse3)
     movd                m0, [blockq]
     pmulhrsw            m0, m12
     pmulhrsw            m0, m12
+%else
+    DEFINE_ARGS dst, stride, block, coef
+    movsx            coefd, word [blockq]
+    imul             coefd, 11585
+    add              coefd, 8192
+    sar              coefd, 14
+    imul             coefd, 11585
+    add              coefd, (16 << 14) + 8192
+    sar              coefd, 14 + 5
+    movd                m0, coefd
+%endif
     SPLATW              m0, m0, 0
     pxor                m4, m4
     movd          [blockq], m4
-    mova                m5, [pw_1024]
-    pmulhrsw            m0, m5              ; (x*1024 + (1<<14))>>15 <=> (x+16)>>5
+%if cpuflag(ssse3)
+    pmulhrsw            m0, [pw_1024]       ; (x*1024 + (1<<14))>>15 <=> (x+16)>>5
+%endif
     VP9_STORE_2X         0,  0,  6,  7,  4
     lea               dstq, [dstq+2*strideq]
     VP9_STORE_2X         0,  0,  6,  7,  4
@@ -556,6 +582,7 @@ cglobal vp9_idct_idct_8x8_add, 4,4,13, dst, stride, block, eob
     VP9_STORE_2X         0,  0,  6,  7,  4
     RET
 
+%if cpuflag(ssse3)
 ; faster path for when only left corner is set (3 input: DC, right to DC, below
 ; to DC). Note: also working with a 2x2 block
 .idcttopleftcorner:
@@ -587,6 +614,7 @@ cglobal vp9_idct_idct_8x8_add, 4,4,13, dst, stride, block, eob
     movh       [blockq+48], m4
     VP9_IDCT8_WRITEOUT
     RET
+%endif
 
 .idctfull: ; generic full 8x8 idct/idct
     mova                m0, [blockq+  0]    ; IN(0)
@@ -608,6 +636,7 @@ cglobal vp9_idct_idct_8x8_add, 4,4,13, dst, stride, block, eob
     RET
 %endmacro
 
+VP9_IDCT_IDCT_8x8_ADD_XMM sse2
 VP9_IDCT_IDCT_8x8_ADD_XMM ssse3
 VP9_IDCT_IDCT_8x8_ADD_XMM avx
 

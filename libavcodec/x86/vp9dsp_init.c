@@ -191,6 +191,7 @@ itxfm_func(idct,  iadst, 4, sse2);
 itxfm_func(iadst, idct,  4, sse2);
 itxfm_func(iadst, iadst, 4, sse2);
 itxfm_funcs(4, ssse3);
+itxfm_func(idct,  idct,  8, sse2);
 itxfm_funcs(8, ssse3);
 itxfm_funcs(8, avx);
 itxfm_funcs(16, ssse3);
@@ -373,6 +374,9 @@ av_cold void ff_vp9dsp_init_x86(VP9DSPContext *dsp)
         dsp->itxfm_add[TX_4X4][ADST_DCT]  = ff_vp9_idct_iadst_4x4_add_sse2;
         dsp->itxfm_add[TX_4X4][DCT_ADST]  = ff_vp9_iadst_idct_4x4_add_sse2;
         dsp->itxfm_add[TX_4X4][ADST_ADST] = ff_vp9_iadst_iadst_4x4_add_sse2;
+        if (ARCH_X86_64) {
+            dsp->itxfm_add[TX_8X8][DCT_DCT] = ff_vp9_idct_idct_8x8_add_sse2;
+        }
         dsp->intra_pred[TX_16X16][VERT_PRED] = ff_vp9_ipred_v_16x16_sse2;
         dsp->intra_pred[TX_32X32][VERT_PRED] = ff_vp9_ipred_v_32x32_sse2;
     }
