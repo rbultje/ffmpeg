@@ -27,6 +27,8 @@ SECTION_RODATA
 
 pw_11585x2:  times 8 dw 23170
 pw_m11585x2: times 8 dw -23170
+pw_m11585_11585: times 4 dw -11585, 11585
+pw_11585_11585: times 8 dw 11585
 
 %macro VP9_IDCT_COEFFS 2-3 0
 pw_%1x2:    times 8 dw  %1*2
@@ -67,6 +69,7 @@ pw_13377x2: times 8 dw 13377*2
 
 pd_8192: times 4 dd 8192
 
+cextern pw_8
 cextern pw_512
 cextern pw_1024
 cextern pw_2048
@@ -204,9 +207,13 @@ cglobal vp9_iwht_iwht_4x4_add, 3, 3, 0, dst, stride, block, eob
 %endmacro
 
 %macro VP9_IDCT4_1D 0
+%if cpuflag(ssse3)
     SUMSUB_BA            w, 2, 0, 4                         ; m2=IN(0)+IN(2) m0=IN(0)-IN(2)
     pmulhrsw            m2, m6                              ; m2=t0
     pmulhrsw            m0, m6                              ; m0=t1
+%else ; <= sse2
+    VP9_UNPACK_MULSUB_2W_4X 0, 2, 11585, 11585, m7, 4, 5    ; m0=t1, m1=t0
+%endif
     VP9_UNPACK_MULSUB_2W_4X 1, 3, 15137, 6270, m7, 4, 5     ; m1=t2, m3=t3
     VP9_IDCT4_1D_FINALIZE
 %endmacro
@@ -222,38 +229,74 @@ cglobal vp9_iwht_iwht_4x4_add, 3, 3, 0, dst, stride, block, eob
 %endmacro
 
 %macro VP9_IDCT4_WRITEOUT 0
+%if cpuflag(ssse3)
     mova                m5, [pw_2048]
     pmulhrsw            m0, m5              ; (x*2048 + (1<<14))>>15 <=> (x+8)>>4
     pmulhrsw            m1, m5
+%else
+    mova                m5, [pw_8]
+    paddw               m0, m5
+    paddw               m1, m5
+    psraw               m0, 4
+    psraw               m1, 4
+%endif
     VP9_STORE_2X         0,  1,  6,  7,  4
     lea               dstq, [dstq+2*strideq]
+%if cpuflag(ssse3)
     pmulhrsw            m2, m5
     pmulhrsw            m3, m5
+%else
+    paddw               m2, m5
+    paddw               m3, m5
+    psraw               m2, 4
+    psraw               m3, 4
+%endif
     VP9_STORE_2X         2,  3,  6,  7,  4
 %endmacro
 
-INIT_MMX ssse3
-cglobal vp9_idct_idct_4x4_add, 4,4,0, dst, stride, block, eob
+%macro IDCT_4x4_FN 1
+INIT_MMX %1
+cglobal vp9_idct_idct_4x4_add, 4, 4, 0, dst, stride, block, eob
 
+%if cpuflag(ssse3)
     cmp eobd, 4 ; 2x2 or smaller
     jg .idctfull
 
     cmp eobd, 1 ; faster path for when only DC is set
     jne .idct2x2
+%else
+    cmp eobd, 1
+    jg .idctfull
+%endif
 
+%if cpuflag(ssse3)
     movd                m0, [blockq]
     mova                m5, [pw_11585x2]
     pmulhrsw            m0, m5
     pmulhrsw            m0, m5
+%else
+    DEFINE_ARGS dst, stride, block, coef
+    movsx            coefd, word [blockq]
+    imul             coefd, 11585
+    add              coefd, 8192
+    sar              coefd, 14
+    imul             coefd, 11585
+    add              coefd, (8 << 14) + 8192
+    sar              coefd, 14 + 4
+    movd                m0, coefd
+%endif
     pshufw              m0, m0, 0
     pxor                m4, m4
     movh          [blockq], m4
+%if cpuflag(ssse3)
     pmulhrsw            m0, [pw_2048]       ; (x*2048 + (1<<14))>>15 <=> (x+8)>>4
+%endif
     VP9_STORE_2X         0,  0,  6,  7,  4
     lea               dstq, [dstq+2*strideq]
     VP9_STORE_2X         0,  0,  6,  7,  4
     RET
 
+%if cpuflag(ssse3)
 ; faster path for when only top left 2x2 block is set
 .idct2x2:
     movd                m0, [blockq+0]
@@ -269,13 +312,16 @@ cglobal vp9_idct_idct_4x4_add, 4,4,0, dst, stride, block, eob
     movh       [blockq+ 8], m4
     VP9_IDCT4_WRITEOUT
     RET
+%endif
 
 .idctfull: ; generic full 4x4 idct/idct
     mova                m0, [blockq+ 0]
     mova                m1, [blockq+ 8]
     mova                m2, [blockq+16]
     mova                m3, [blockq+24]
+%if cpuflag(ssse3)
     mova                m6, [pw_11585x2]
+%endif
     mova                m7, [pd_8192]       ; rounding
     VP9_IDCT4_1D
     TRANSPOSE4x4W  0, 1, 2, 3, 4
@@ -287,6 +333,10 @@ cglobal vp9_idct_idct_4x4_add, 4,4,0, dst, stride, block, eob
     mova       [blockq+24], m4
     VP9_IDCT4_WRITEOUT
     RET
+%endmacro
+
+IDCT_4x4_FN mmxext
+IDCT_4x4_FN ssse3
 
 ;-------------------------------------------------------------------------------------------
 ; void vp9_iadst_iadst_4x4_add_<opt>(uint8_t *dst, ptrdiff_t stride, int16_t *block, int eob);

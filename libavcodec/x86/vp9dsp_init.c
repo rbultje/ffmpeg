@@ -186,6 +186,7 @@ itxfm_func(iadst, idct,  size, opt); \
 itxfm_func(idct,  iadst, size, opt); \
 itxfm_func(iadst, iadst, size, opt)
 
+itxfm_func(idct, idct, 4, mmxext);
 itxfm_funcs(4, ssse3);
 itxfm_funcs(8, ssse3);
 itxfm_funcs(8, avx);
@@ -352,6 +353,7 @@ av_cold void ff_vp9dsp_init_x86(VP9DSPContext *dsp)
     if (EXTERNAL_MMXEXT(cpu_flags)) {
         init_fpel(4, 1,  4, avg, mmxext);
         init_fpel(3, 1,  8, avg, mmxext);
+        dsp->itxfm_add[TX_4X4][DCT_DCT] = ff_vp9_idct_idct_4x4_add_mmxext;
     }
 
     if (EXTERNAL_SSE(cpu_flags)) {
