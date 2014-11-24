@@ -660,23 +660,28 @@ VP9_IDCT_IDCT_8x8_ADD_XMM avx
     VP9_UNPACK_MULSUB_2D_4X  0, 11,  4,  5, 15137,  6270    ; m0/4=t5[d], m11/5=t4[d]
     VP9_UNPACK_MULSUB_2D_4X  9,  2,  6, 13,  6270, 15137    ; m9/6=t6[d], m2/13=t7[d]
     VP9_RND_SH_SUMSUB_BA     9, 11,  6,  5, 14, m7
-    psignw                  m9, [pw_m1]                     ; m9=out1[w], m11=t6[w]
+    PSIGNW                  m9, [pw_m1]                     ; m9=out1[w], m11=t6[w]
     VP9_RND_SH_SUMSUB_BA     2,  0, 13,  4, 14, m7          ; m2=out6[w], m0=t7[w]
 
     SUMSUB_BA                w, 10,  8, 14                  ; m10=out0[w], m8=t2[w]
     SUMSUB_BA                w,  1,  3, 14
-    psignw                  m1, [pw_m1]                     ; m1=out7[w], m3=t3[w]
+    PSIGNW                  m1, [pw_m1]                     ; m1=out7[w], m3=t3[w]
 
     ; m10=out0, m9=out1, m8=t2, m3=t3, m11=t6, m0=t7, m2=out6, m1=out7
 
+%if cpuflag(ssse3)
     SUMSUB_BA                w,  3,  8,  4
     SUMSUB_BA                w,  0, 11,  5
     pmulhrsw                m3, m12
     pmulhrsw               m11, m12
     pmulhrsw                m8, m12                         ; out4
     pmulhrsw                m0, m12                         ; out2
-    psignw                  m3, [pw_m1]                     ; out3
-    psignw                 m11, [pw_m1]                     ; out5
+%else
+    VP9_UNPACK_MULSUB_2W_4X  8, 3, 11585, 11585, m7, 12, 13
+    VP9_UNPACK_MULSUB_2W_4X 11, 0, 11585, 11585, m7, 12, 13
+%endif
+    PSIGNW                  m3, [pw_m1]                     ; out3
+    PSIGNW                 m11, [pw_m1]                     ; out5
 
     ; m10=out0, m9=out1, m0=out2, m3=out3, m8=out4, m11=out5, m2=out6, m1=out7
 
@@ -695,8 +700,9 @@ cglobal vp9_%1_%3_8x8_add, 3, 3, 15, dst, stride, block, eob
     mova                m9, [blockq+ 80]    ; IN(5)
     mova               m10, [blockq+ 96]    ; IN(6)
     mova               m11, [blockq+112]    ; IN(7)
-
+%if cpuflag(ssse3)
     mova               m12, [pw_11585x2]    ; often used
+%endif
     mova                m7, [pd_8192]       ; rounding
     VP9_%2_1D
     TRANSPOSE8x8W  0, 1, 2, 3, 8, 9, 10, 11, 4
@@ -708,6 +714,11 @@ cglobal vp9_%1_%3_8x8_add, 3, 3, 15, dst, stride, block, eob
     RET
 %endmacro
 
+%define PSIGNW PSIGNW_MMX
+IADST8_FN idct,  IDCT8,  iadst, IADST8, sse2
+IADST8_FN iadst, IADST8, idct,  IDCT8,  sse2
+IADST8_FN iadst, IADST8, iadst, IADST8, sse2
+%define PSIGNW PSIGNW_SSSE3
 IADST8_FN idct,  IDCT8,  iadst, IADST8, ssse3
 IADST8_FN idct,  IDCT8,  iadst, IADST8, avx
 IADST8_FN iadst, IADST8, idct,  IDCT8,  ssse3
