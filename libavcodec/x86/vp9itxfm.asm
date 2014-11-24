@@ -306,7 +306,11 @@ cglobal vp9_idct_idct_4x4_add, 4, 4, 0, dst, stride, block, eob
     mova                m6, [pw_6270x2]
     mova                m7, [pw_15137x2]
     VP9_IDCT4_2x2_1D
-    TRANSPOSE4x4W  0, 1, 2, 3, 4
+    ; partial 2x4 transpose
+    punpcklwd           m0, m1
+    punpcklwd           m2, m3
+    SBUTTERFLY          dq, 0, 2, 1
+    SWAP                1, 2
     VP9_IDCT4_2x2_1D
     pxor                m4, m4  ; used for the block reset, and VP9_STORE_2X
     movh       [blockq+ 0], m4
