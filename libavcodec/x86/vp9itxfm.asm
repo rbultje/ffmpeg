@@ -538,7 +538,7 @@ IADST4_FN iadst, IADST4, iadst, IADST4, ssse3
 
 %macro VP9_IDCT_IDCT_8x8_ADD_XMM 1
 INIT_XMM %1
-cglobal vp9_idct_idct_8x8_add, 4,4,13, dst, stride, block, eob
+cglobal vp9_idct_idct_8x8_add, 4, 4, 12 + cpuflag(ssse3), dst, stride, block, eob
 
 %if cpuflag(ssse3)
     mova               m12, [pw_11585x2]    ; often used
