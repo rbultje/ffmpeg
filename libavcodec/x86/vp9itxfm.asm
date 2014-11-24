@@ -663,8 +663,8 @@ VP9_IDCT_IDCT_8x8_ADD_XMM avx
     PSIGNW                  m9, [pw_m1]                     ; m9=out1[w], m11=t6[w]
     VP9_RND_SH_SUMSUB_BA     2,  0, 13,  4, 14, m7          ; m2=out6[w], m0=t7[w]
 
-    SUMSUB_BA                w, 10,  8, 14                  ; m10=out0[w], m8=t2[w]
-    SUMSUB_BA                w,  1,  3, 14
+    SUMSUB_BA                w, 10,  8, 4                   ; m10=out0[w], m8=t2[w]
+    SUMSUB_BA                w,  1,  3, 4
     PSIGNW                  m1, [pw_m1]                     ; m1=out7[w], m3=t3[w]
 
     ; m10=out0, m9=out1, m8=t2, m3=t3, m11=t6, m0=t7, m2=out6, m1=out7
@@ -691,7 +691,7 @@ VP9_IDCT_IDCT_8x8_ADD_XMM avx
 
 %macro IADST8_FN 5
 INIT_XMM %5
-cglobal vp9_%1_%3_8x8_add, 3, 3, 15, dst, stride, block, eob
+cglobal vp9_%1_%3_8x8_add, 3, 3, 14, dst, stride, block, eob
     mova                m0, [blockq+  0]    ; IN(0)
     mova                m1, [blockq+ 16]    ; IN(1)
     mova                m2, [blockq+ 32]    ; IN(2)
