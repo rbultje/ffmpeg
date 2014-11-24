@@ -595,7 +595,15 @@ cglobal vp9_idct_idct_8x8_add, 4,4,13, dst, stride, block, eob
     mova                m6, [pw_3196x2]
     mova                m7, [pw_16069x2]
     VP9_IDCT8_2x2_1D
-    TRANSPOSE8x8W  0, 1, 2, 3, 8, 9, 10, 11, 4
+    ; partial 2x8 transpose
+    punpcklwd           m0, m1
+    punpcklwd           m2, m3
+    punpcklwd           m8, m9
+    punpcklwd          m10, m11
+    punpckldq           m0, m2
+    punpckldq           m8, m10
+    SBUTTERFLY         qdq, 0, 8, 1
+    SWAP                 1, 8
     VP9_IDCT8_2x2_1D
     pxor                m4, m4  ; used for the block reset, and VP9_STORE_2X
     movd       [blockq+ 0], m4
@@ -609,7 +617,17 @@ cglobal vp9_idct_idct_8x8_add, 4,4,13, dst, stride, block, eob
     movh                m2, [blockq +32]
     movh                m3, [blockq +48]
     VP9_IDCT8_4x4_1D
-    TRANSPOSE8x8W  0, 1, 2, 3, 8, 9, 10, 11, 4
+    ; partial 4x8 transpose
+    punpcklwd           m0, m1
+    punpcklwd           m2, m3
+    punpcklwd           m8, m9
+    punpcklwd          m10, m11
+    SBUTTERFLY          dq, 0, 2, 1
+    SBUTTERFLY          dq, 8, 10, 9
+    SBUTTERFLY         qdq, 0, 8, 1
+    SBUTTERFLY         qdq, 2, 10, 9
+    SWAP                 1, 8
+    SWAP                 3, 10
     VP9_IDCT8_4x4_1D
     pxor                m4, m4
     movh       [blockq+ 0], m4
