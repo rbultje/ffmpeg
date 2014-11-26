@@ -443,97 +443,100 @@ IADST4_FN iadst, IADST4, iadst, IADST4, ssse3
 ;-------------------------------------------------------------------------------------------
 
 %macro VP9_IDCT8_1D_FINALIZE 0
-    SUMSUB_BA            w,  3, 10, 4                       ;  m3=t0+t7, m10=t0-t7
-    SUMSUB_BA            w,  1,  2, 4                       ;  m1=t1+t6,  m2=t1-t6
-    SUMSUB_BA            w, 11,  0, 4                       ; m11=t2+t5,  m0=t2-t5
-    SUMSUB_BA            w,  9,  8, 4                       ;  m9=t3+t4,  m8=t3-t4
-    SWAP                11, 10, 2
-    SWAP                 3,  9, 0
+    SUMSUB_BA            w,  3,  6, 8                       ; m3=t0+t7, m6=t0-t7
+    SUMSUB_BA            w,  1,  2, 8                       ; m1=t1+t6, m2=t1-t6
+    SUMSUB_BA            w,  7,  0, 8                       ; m7=t2+t5, m0=t2-t5
+    SUMSUB_BA            w,  5,  4, 8                       ; m5=t3+t4, m4=t3-t4
+    SWAP                 7,  6,  2
+    SWAP                 3,  5,  0
 %endmacro
 
 %macro VP9_IDCT8_1D 0
 %if cpuflag(ssse3)
-    SUMSUB_BA            w, 8, 0, 4                         ; m8=IN(0)+IN(4) m0=IN(0)-IN(4)
-    pmulhrsw            m8, m12                             ; m8=t0a
-    pmulhrsw            m0, m12                             ; m0=t1a
+    SUMSUB_BA            w, 4, 0, 8                         ; m4=IN(0)+IN(4) m0=IN(0)-IN(4)
+    pmulhrsw            m4, W_11585x2_REG                   ; m4=t0a
+    pmulhrsw            m0, W_11585x2_REG                   ; m0=t1a
 %else
-    VP9_UNPACK_MULSUB_2W_4X 0,  8, 11585, 11585, m7, 4, 5
+    VP9_UNPACK_MULSUB_2W_4X 0,  4, 11585, 11585, D_8192_REG, 8, 9
 %endif
-    VP9_UNPACK_MULSUB_2W_4X 2, 10, 15137,  6270, m7, 4, 5   ; m2=t2a, m10=t3a
-    VP9_UNPACK_MULSUB_2W_4X 1, 11, 16069,  3196, m7, 4, 5   ; m1=t4a, m11=t7a
-    VP9_UNPACK_MULSUB_2W_4X 9,  3,  9102, 13623, m7, 4, 5   ; m9=t5a,  m3=t6a
-    SUMSUB_BA            w, 10,  8, 4                       ; m10=t0a+t3a (t0),  m8=t0a-t3a (t3)
-    SUMSUB_BA            w,  2,  0, 4                       ;  m2=t1a+t2a (t1),  m0=t1a-t2a (t2)
-    SUMSUB_BA            w,  9,  1, 4                       ;  m9=t4a+t5a (t4),  m1=t4a-t5a (t5a)
-    SUMSUB_BA            w,  3, 11, 4                       ;  m3=t7a+t6a (t7), m11=t7a-t6a (t6a)
+    VP9_UNPACK_MULSUB_2W_4X 2,  6, 15137,  6270, D_8192_REG, 8, 9  ; m2=t2a, m6=t3a
+    VP9_UNPACK_MULSUB_2W_4X 1,  7, 16069,  3196, D_8192_REG, 8, 9  ; m1=t4a, m7=t7a
+    VP9_UNPACK_MULSUB_2W_4X 5,  3,  9102, 13623, D_8192_REG, 8, 9  ; m5=t5a, m3=t6a
+    SUMSUB_BA            w,  6,  4, 8                       ; m6=t0a+t3a (t0), m4=t0a-t3a (t3)
+    SUMSUB_BA            w,  2,  0, 8                       ; m2=t1a+t2a (t1), m0=t1a-t2a (t2)
+    SUMSUB_BA            w,  5,  1, 8                       ; m5=t4a+t5a (t4), m1=t4a-t5a (t5a)
+    SUMSUB_BA            w,  3,  7, 8                       ; m3=t7a+t6a (t7), m7=t7a-t6a (t6a)
 %if cpuflag(ssse3)
-    SUMSUB_BA            w,  1, 11, 4                       ;  m1=t6a+t5a (t6), m11=t6a-t5a (t5)
-    pmulhrsw            m1, m12                             ; m1=t6
-    pmulhrsw           m11, m12                             ; m11=t5
+    SUMSUB_BA            w,  1,  7, 8                       ; m1=t6a+t5a (t6), m7=t6a-t5a (t5)
+    pmulhrsw            m1, W_11585x2_REG                   ; m1=t6
+    pmulhrsw            m7, W_11585x2_REG                   ; m7=t5
 %else
-    VP9_UNPACK_MULSUB_2W_4X 11, 1, 11585, 11585, m7, 4, 5
+    VP9_UNPACK_MULSUB_2W_4X 7, 1, 11585, 11585, D_8192_REG, 8, 9
 %endif
     VP9_IDCT8_1D_FINALIZE
 %endmacro
 
 %macro VP9_IDCT8_4x4_1D 0
-    pmulhrsw            m0, m12                             ; m0=t1a/t0a
-    pmulhrsw           m10, m2, [pw_15137x2]                ; m10=t3a
+    pmulhrsw            m0, W_11585x2_REG                   ; m0=t1a/t0a
+    pmulhrsw            m6, m2, [pw_15137x2]                ; m6=t3a
     pmulhrsw            m2, [pw_6270x2]                     ; m2=t2a
-    pmulhrsw           m11, m1, [pw_16069x2]                ; m11=t7a
+    pmulhrsw            m7, m1, [pw_16069x2]                ; m7=t7a
     pmulhrsw            m1, [pw_3196x2]                     ; m1=t4a
-    pmulhrsw            m9, m3, [pw_9102x2]                 ; m9=-t5a
+    pmulhrsw            m5, m3, [pw_9102x2]                 ; m5=-t5a
     pmulhrsw            m3, [pw_13623x2]                    ; m3=t6a
-    psubw               m8, m0, m10                         ; m8=t0a-t3a (t3)
-    paddw              m10, m0                              ; m10=t0a+t3a (t0)
-    SUMSUB_BA            w,  2,  0, 4                       ;  m2=t1a+t2a (t1),  m0=t1a-t2a (t2)
-    SUMSUB_BA            w,  9,  1, 4                       ;  m1=t4a+t5a (t4),  m9=t4a-t5a (t5a)
-    SWAP                 1,  9
-    SUMSUB_BA            w,  3, 11, 4                       ;  m3=t7a+t6a (t7), m11=t7a-t6a (t6a)
-    SUMSUB_BA            w,  1, 11, 4                       ;  m1=t6a+t5a (t6), m11=t6a-t5a (t5)
-    pmulhrsw            m1, m12                             ; m1=t6
-    pmulhrsw           m11, m12                             ; m11=t5
+    psubw               m4, m0, m6                          ; m4=t0a-t3a (t3)
+    paddw               m6, m0                              ; m6=t0a+t3a (t0)
+    SUMSUB_BA            w,  2,  0, 8                       ; m2=t1a+t2a (t1), m0=t1a-t2a (t2)
+    SUMSUB_BA            w,  5,  1, 8                       ; m1=t4a+t5a (t4), m5=t4a-t5a (t5a)
+    SWAP                 1,  5
+    SUMSUB_BA            w,  3,  7, 8                       ; m3=t7a+t6a (t7), m7=t7a-t6a (t6a)
+    SUMSUB_BA            w,  1,  7, 8                       ; m1=t6a+t5a (t6), m7=t6a-t5a (t5)
+    pmulhrsw            m1, W_11585x2_REG                   ; m1=t6
+    pmulhrsw            m7, W_11585x2_REG                   ; m7=t5
     VP9_IDCT8_1D_FINALIZE
 %endmacro
 
-; TODO: a lot of t* copies can probably be removed and merged with
-; following SUMSUBs from VP9_IDCT8_1D_FINALIZE with AVX
 %macro VP9_IDCT8_2x2_1D 0
-    pmulhrsw            m0, m12                             ;  m0=t0
-    mova                m3, m1
-    pmulhrsw            m1, m6                              ;  m1=t4
-    pmulhrsw            m3, m7                              ;  m3=t7
-    mova                m2, m0                              ;  m2=t1
-    mova               m10, m0                              ; m10=t2
-    mova                m8, m0                              ;  m8=t3
-    mova               m11, m3                              ; t5 = t7a ...
-    mova                m9, m3                              ; t6 = t7a ...
-    psubw              m11, m1                              ; t5 = t7a - t4a
-    paddw               m9, m1                              ; t6 = t7a + t4a
-    pmulhrsw           m11, m12                             ; m11=t5
-    pmulhrsw            m9, m12                             ;  m9=t6
-    SWAP                 0, 10
-    SWAP                 9,  1
-    VP9_IDCT8_1D_FINALIZE
+    pmulhrsw            m0, W_11585x2_REG                   ; m0=t0
+    pmulhrsw            m3, m1, W_16069x2_REG               ; m3=t7
+    pmulhrsw            m1, W_3196x2_REG                    ; m1=t4
+    psubw               m7, m3, m1                          ; t5 = t7a - t4a
+    paddw               m5, m3, m1                          ; t6 = t7a + t4a
+    pmulhrsw            m7, W_11585x2_REG                   ; m7=t5
+    pmulhrsw            m5, W_11585x2_REG                   ; m5=t6
+    SWAP                 5,  1
+    ; merged VP9_IDCT8_1D_FINALIZE to make register-sharing w/ avx easier
+    psubw               m6, m0, m3                          ; m6=t0-t7
+    paddw               m3, m0                              ; m3=t0+t7
+    psubw               m2, m0, m1                          ; m2=t1-t6
+    paddw               m1, m0                              ; m1=t1+t6
+    psubw               m4, m0, m5                          ; m4=t3-t4
+    paddw               m5, m0                              ; m5=t3+t4
+    SUMSUB_BA            w,  7,  0, 8                       ; m7=t2+t5, m0=t2-t5
+    SWAP                 7,  6,  2
+    SWAP                 3,  5,  0
+%endmacro
+
+%macro VP9_IDCT8_WRITEx2 6 ; line1, line2, tmp1, tmp2, zero, pw_1024
+    pmulhrsw           m%1, %6              ; (x*1024 + (1<<14))>>15 <=> (x+16)>>5
+    pmulhrsw           m%2, %6
+    VP9_STORE_2X        %1, %2, %3, %4, %5
 %endmacro
 
 %macro VP9_IDCT8_WRITEOUT 0
-    mova                m5, [pw_1024]
-    pmulhrsw            m0, m5              ; (x*1024 + (1<<14))>>15 <=> (x+16)>>5
-    pmulhrsw            m1, m5
-    VP9_STORE_2X         0,  1,  6,  7,  4
+%if ARCH_X86_64
+    mova                m9, [pw_1024]
+%define W_1024_REG m9
+%else
+%define W_1024_REG [pw_1024]
+%endif
+    VP9_IDCT8_WRITEx2    0,  1, 10, 11, 8, W_1024_REG
     lea               dstq, [dstq+2*strideq]
-    pmulhrsw            m2, m5
-    pmulhrsw            m3, m5
-    VP9_STORE_2X         2,  3,  6,  7,  4
+    VP9_IDCT8_WRITEx2    2,  3, 10, 11, 8, W_1024_REG
     lea               dstq, [dstq+2*strideq]
-    pmulhrsw            m8, m5
-    pmulhrsw            m9, m5
-    VP9_STORE_2X         8,  9,  6,  7,  4
+    VP9_IDCT8_WRITEx2    4,  5, 10, 11, 8, W_1024_REG
     lea               dstq, [dstq+2*strideq]
-    pmulhrsw           m10, m5
-    pmulhrsw           m11, m5
-    VP9_STORE_2X        10, 11,  6,  7,  4
+    VP9_IDCT8_WRITEx2    6,  7, 10, 11, 8, W_1024_REG
 %endmacro
 
 %macro VP9_IDCT_IDCT_8x8_ADD_XMM 1
@@ -541,7 +544,12 @@ INIT_XMM %1
 cglobal vp9_idct_idct_8x8_add, 4, 4, 12 + cpuflag(ssse3), dst, stride, block, eob
 
 %if cpuflag(ssse3)
+%if ARCH_X86_64
     mova               m12, [pw_11585x2]    ; often used
+%define W_11585x2_REG m12
+%else
+%define W_11585x2_REG [pw_11585x2]
+%endif
 
     cmp eobd, 12 ; top left half or less
     jg .idctfull
@@ -558,8 +566,8 @@ cglobal vp9_idct_idct_8x8_add, 4, 4, 12 + cpuflag(ssse3), dst, stride, block, eo
 
 %if cpuflag(ssse3)
     movd                m0, [blockq]
-    pmulhrsw            m0, m12
-    pmulhrsw            m0, m12
+    pmulhrsw            m0, W_11585x2_REG
+    pmulhrsw            m0, W_11585x2_REG
 %else
     DEFINE_ARGS dst, stride, block, coef
     movsx            coefd, word [blockq]
@@ -577,12 +585,10 @@ cglobal vp9_idct_idct_8x8_add, 4, 4, 12 + cpuflag(ssse3), dst, stride, block, eo
 %if cpuflag(ssse3)
     pmulhrsw            m0, [pw_1024]       ; (x*1024 + (1<<14))>>15 <=> (x+16)>>5
 %endif
+%rep 3
     VP9_STORE_2X         0,  0,  6,  7,  4
     lea               dstq, [dstq+2*strideq]
-    VP9_STORE_2X         0,  0,  6,  7,  4
-    lea               dstq, [dstq+2*strideq]
-    VP9_STORE_2X         0,  0,  6,  7,  4
-    lea               dstq, [dstq+2*strideq]
+%endrep
     VP9_STORE_2X         0,  0,  6,  7,  4
     RET
 
@@ -592,22 +598,29 @@ cglobal vp9_idct_idct_8x8_add, 4, 4, 12 + cpuflag(ssse3), dst, stride, block, eo
 .idcttopleftcorner:
     movd                m0, [blockq+0]
     movd                m1, [blockq+16]
-    mova                m6, [pw_3196x2]
-    mova                m7, [pw_16069x2]
+%if ARCH_X86_64
+    mova               m10, [pw_3196x2]
+    mova               m11, [pw_16069x2]
+%define W_3196x2_REG m10
+%define W_16069x2_REG m11
+%else
+%define W_3196x2_REG [pw_3196x2]
+%define W_16069x2_REG [pw_16069x2]
+%endif
     VP9_IDCT8_2x2_1D
     ; partial 2x8 transpose
     punpcklwd           m0, m1
     punpcklwd           m2, m3
-    punpcklwd           m8, m9
-    punpcklwd          m10, m11
+    punpcklwd           m4, m5
+    punpcklwd           m6, m7
     punpckldq           m0, m2
-    punpckldq           m8, m10
-    SBUTTERFLY         qdq, 0, 8, 1
-    SWAP                 1, 8
+    punpckldq           m4, m6
+    SBUTTERFLY         qdq, 0, 4, 1
+    SWAP                 1, 4
     VP9_IDCT8_2x2_1D
-    pxor                m4, m4  ; used for the block reset, and VP9_STORE_2X
-    movd       [blockq+ 0], m4
-    movd       [blockq+16], m4
+    pxor                m8, m8  ; used for the block reset, and VP9_STORE_2X
+    movd       [blockq+ 0], m8
+    movd       [blockq+16], m8
     VP9_IDCT8_WRITEOUT
     RET
 
@@ -620,20 +633,20 @@ cglobal vp9_idct_idct_8x8_add, 4, 4, 12 + cpuflag(ssse3), dst, stride, block, eo
     ; partial 4x8 transpose
     punpcklwd           m0, m1
     punpcklwd           m2, m3
-    punpcklwd           m8, m9
-    punpcklwd          m10, m11
+    punpcklwd           m4, m5
+    punpcklwd           m6, m7
     SBUTTERFLY          dq, 0, 2, 1
-    SBUTTERFLY          dq, 8, 10, 9
-    SBUTTERFLY         qdq, 0, 8, 1
-    SBUTTERFLY         qdq, 2, 10, 9
-    SWAP                 1, 8
-    SWAP                 3, 10
+    SBUTTERFLY          dq, 4, 6, 5
+    SBUTTERFLY         qdq, 0, 4, 1
+    SBUTTERFLY         qdq, 2, 6, 5
+    SWAP                 1, 4
+    SWAP                 3, 6
     VP9_IDCT8_4x4_1D
-    pxor                m4, m4
-    movh       [blockq+ 0], m4
-    movh       [blockq+16], m4
-    movh       [blockq+32], m4
-    movh       [blockq+48], m4
+    pxor                m8, m8
+    movh       [blockq+ 0], m8
+    movh       [blockq+16], m8
+    movh       [blockq+32], m8
+    movh       [blockq+48], m8
     VP9_IDCT8_WRITEOUT
     RET
 %endif
@@ -643,19 +656,25 @@ cglobal vp9_idct_idct_8x8_add, 4, 4, 12 + cpuflag(ssse3), dst, stride, block, eo
     mova                m1, [blockq+ 16]    ; IN(1)
     mova                m2, [blockq+ 32]    ; IN(2)
     mova                m3, [blockq+ 48]    ; IN(3)
-    mova                m8, [blockq+ 64]    ; IN(4)
-    mova                m9, [blockq+ 80]    ; IN(5)
-    mova               m10, [blockq+ 96]    ; IN(6)
-    mova               m11, [blockq+112]    ; IN(7)
-    mova                m7, [pd_8192]       ; rounding
+    mova                m4, [blockq+ 64]    ; IN(4)
+    mova                m5, [blockq+ 80]    ; IN(5)
+    mova                m6, [blockq+ 96]    ; IN(6)
+    mova                m7, [blockq+112]    ; IN(7)
+%if ARCH_X86_64
+    mova               m11, [pd_8192]       ; rounding
+%define D_8192_REG m11
+%else
+%define D_8192_REG [pd_8192]
+%endif
     VP9_IDCT8_1D
-    TRANSPOSE8x8W  0, 1, 2, 3, 8, 9, 10, 11, 4
+    TRANSPOSE8x8W  0, 1, 2, 3, 4, 5, 6, 7, 8
     VP9_IDCT8_1D
 
-    pxor                m4, m4  ; used for the block reset, and VP9_STORE_2X
-    ZERO_BLOCK      blockq, 16, 8, m4
+    pxor                m8, m8  ; used for the block reset, and VP9_STORE_2X
+    ZERO_BLOCK      blockq, 16, 8, m8
     VP9_IDCT8_WRITEOUT
     RET
+%undef W_11585x2_REG
 %endmacro
 
 VP9_IDCT_IDCT_8x8_ADD_XMM sse2
@@ -666,74 +685,85 @@ VP9_IDCT_IDCT_8x8_ADD_XMM avx
 ; void vp9_iadst_iadst_8x8_add_<opt>(uint8_t *dst, ptrdiff_t stride, int16_t *block, int eob);
 ;---------------------------------------------------------------------------------------------
 
-%macro VP9_IADST8_1D 0 ; input/output=m0/1/2/3/8/9/10/11
-    VP9_UNPACK_MULSUB_2D_4X 11,  0,  4,  5, 16305,  1606    ; m11/4=t1[d], m0/5=t0[d]
-    VP9_UNPACK_MULSUB_2D_4X  3,  8,  6, 13, 10394, 12665    ; m3/6=t5[d], m8/13=t4[d]
-    VP9_RND_SH_SUMSUB_BA     8,  0, 13,  5, 14, m7          ; m8=t0[w], m0=t4[w]
-    VP9_RND_SH_SUMSUB_BA     3, 11,  6,  4, 14, m7          ; m3=t1[w], m11=t5[w]
+%macro VP9_IADST8_1D 0 ; input/output=m0/1/2/3/4/5/6/7
+    VP9_UNPACK_MULSUB_2D_4X  7,  0,  8,  9, 16305,  1606    ; m7/8=t1[d], m0/9=t0[d]
+    VP9_UNPACK_MULSUB_2D_4X  3,  4, 10, 13, 10394, 12665    ; m3/10=t5[d], m4/13=t4[d]
+    VP9_RND_SH_SUMSUB_BA     4,  0, 13,  9, 14, D_8192_REG  ; m4=t0[w], m0=t4[w]
+    VP9_RND_SH_SUMSUB_BA     3,  7, 10,  8, 14, D_8192_REG  ; m3=t1[w], m7=t5[w]
 
-    VP9_UNPACK_MULSUB_2D_4X  9,  2,  4,  5, 14449,  7723    ; m9/4=t3[d], m2/5=t2[d]
-    VP9_UNPACK_MULSUB_2D_4X  1, 10,  6, 13,  4756, 15679    ; m1/6=t7[d], m10/13=t6[d]
-    VP9_RND_SH_SUMSUB_BA    10,  2, 13,  5, 14, m7          ; m10=t2[w], m2=t6[w]
-    VP9_RND_SH_SUMSUB_BA     1,  9,  6,  4, 14, m7          ; m1=t3[w], m9=t7[w]
+    VP9_UNPACK_MULSUB_2D_4X  5,  2,  8,  9, 14449,  7723    ; m5/8=t3[d], m2/9=t2[d]
+    VP9_UNPACK_MULSUB_2D_4X  1,  6, 10, 13,  4756, 15679    ; m1/10=t7[d], m6/13=t6[d]
+    VP9_RND_SH_SUMSUB_BA     6,  2, 13,  9, 14, D_8192_REG  ; m6=t2[w], m2=t6[w]
+    VP9_RND_SH_SUMSUB_BA     1,  5, 10,  8, 14, D_8192_REG  ; m1=t3[w], m5=t7[w]
 
-    ; m8=t0, m3=t1, m10=t2, m1=t3, m0=t4, m11=t5, m2=t6, m9=t7
+    ; m4=t0, m3=t1, m6=t2, m1=t3, m0=t4, m7=t5, m2=t6, m5=t7
 
-    VP9_UNPACK_MULSUB_2D_4X  0, 11,  4,  5, 15137,  6270    ; m0/4=t5[d], m11/5=t4[d]
-    VP9_UNPACK_MULSUB_2D_4X  9,  2,  6, 13,  6270, 15137    ; m9/6=t6[d], m2/13=t7[d]
-    VP9_RND_SH_SUMSUB_BA     9, 11,  6,  5, 14, m7
-    PSIGNW                  m9, [pw_m1]                     ; m9=out1[w], m11=t6[w]
-    VP9_RND_SH_SUMSUB_BA     2,  0, 13,  4, 14, m7          ; m2=out6[w], m0=t7[w]
+    VP9_UNPACK_MULSUB_2D_4X  0,  7,  8,  9, 15137,  6270    ; m0/8=t5[d], m7/9=t4[d]
+    VP9_UNPACK_MULSUB_2D_4X  5,  2, 10, 13,  6270, 15137    ; m5/10=t6[d], m2/13=t7[d]
+    VP9_RND_SH_SUMSUB_BA     5,  7, 10,  9, 14, D_8192_REG
+    PSIGNW                  m5, W_M1_REG                    ; m5=out1[w], m7=t6[w]
+    VP9_RND_SH_SUMSUB_BA     2,  0, 13,  8, 14, D_8192_REG  ; m2=out6[w], m0=t7[w]
 
-    SUMSUB_BA                w, 10,  8, 4                   ; m10=out0[w], m8=t2[w]
-    SUMSUB_BA                w,  1,  3, 4
-    PSIGNW                  m1, [pw_m1]                     ; m1=out7[w], m3=t3[w]
+    SUMSUB_BA                w,  6,  4, 8                   ; m6=out0[w], m4=t2[w]
+    SUMSUB_BA                w,  1,  3, 8
+    PSIGNW                  m1, W_M1_REG                    ; m1=out7[w], m3=t3[w]
 
-    ; m10=out0, m9=out1, m8=t2, m3=t3, m11=t6, m0=t7, m2=out6, m1=out7
+    ; m6=out0, m5=out1, m4=t2, m3=t3, m7=t6, m0=t7, m2=out6, m1=out7
 
 %if cpuflag(ssse3)
-    SUMSUB_BA                w,  3,  8,  4
-    SUMSUB_BA                w,  0, 11,  5
-    pmulhrsw                m3, m12
-    pmulhrsw               m11, m12
-    pmulhrsw                m8, m12                         ; out4
-    pmulhrsw                m0, m12                         ; out2
+    SUMSUB_BA                w,  3,  4,  8
+    SUMSUB_BA                w,  0,  7,  9
+    pmulhrsw                m3, W_11585x2_REG
+    pmulhrsw                m7, W_11585x2_REG
+    pmulhrsw                m4, W_11585x2_REG               ; out4
+    pmulhrsw                m0, W_11585x2_REG               ; out2
 %else
-    VP9_UNPACK_MULSUB_2W_4X  8, 3, 11585, 11585, m7, 12, 13
-    VP9_UNPACK_MULSUB_2W_4X 11, 0, 11585, 11585, m7, 12, 13
+    VP9_UNPACK_MULSUB_2W_4X  4, 3, 11585, 11585, D_8192_REG, 12, 13
+    VP9_UNPACK_MULSUB_2W_4X  7, 0, 11585, 11585, D_8192_REG, 12, 13
 %endif
-    PSIGNW                  m3, [pw_m1]                     ; out3
-    PSIGNW                 m11, [pw_m1]                     ; out5
+    PSIGNW                  m3, W_M1_REG                    ; out3
+    PSIGNW                  m7, W_M1_REG                    ; out5
 
-    ; m10=out0, m9=out1, m0=out2, m3=out3, m8=out4, m11=out5, m2=out6, m1=out7
+    ; m6=out0, m5=out1, m0=out2, m3=out3, m4=out4, m7=out5, m2=out6, m1=out7
 
-    SWAP                     0, 10, 2
-    SWAP                    11,  1, 9
+    SWAP                     0, 6, 2
+    SWAP                     7, 1, 5
 %endmacro
 
 %macro IADST8_FN 5
 INIT_XMM %5
-cglobal vp9_%1_%3_8x8_add, 3, 3, 14, dst, stride, block, eob
+cglobal vp9_%1_%3_8x8_add, 3, 3, 16, dst, stride, block, eob
     mova                m0, [blockq+  0]    ; IN(0)
     mova                m1, [blockq+ 16]    ; IN(1)
     mova                m2, [blockq+ 32]    ; IN(2)
     mova                m3, [blockq+ 48]    ; IN(3)
-    mova                m8, [blockq+ 64]    ; IN(4)
-    mova                m9, [blockq+ 80]    ; IN(5)
-    mova               m10, [blockq+ 96]    ; IN(6)
-    mova               m11, [blockq+112]    ; IN(7)
+    mova                m4, [blockq+ 64]    ; IN(4)
+    mova                m5, [blockq+ 80]    ; IN(5)
+    mova                m6, [blockq+ 96]    ; IN(6)
+    mova                m7, [blockq+112]    ; IN(7)
+%if ARCH_X86_64
 %if cpuflag(ssse3)
     mova               m12, [pw_11585x2]    ; often used
 %endif
-    mova                m7, [pd_8192]       ; rounding
+    mova               m11, [pd_8192]       ; rounding
+    mova               m15, [pw_m1]
+%define W_11585x2_REG m12
+%define D_8192_REG m11
+%define W_M1_REG m15
+%else
+%define W_11585x2_REG [pw_11585x2]
+%define D_8192_REG [pd_8192]
+%define W_M1_REG [pw_m1]
+%endif
     VP9_%2_1D
-    TRANSPOSE8x8W  0, 1, 2, 3, 8, 9, 10, 11, 4
+    TRANSPOSE8x8W  0, 1, 2, 3, 4, 5, 6, 7, 8
     VP9_%4_1D
 
-    pxor                m4, m4  ; used for the block reset, and VP9_STORE_2X
-    ZERO_BLOCK      blockq, 16, 8, m4
+    pxor                m8, m8  ; used for the block reset, and VP9_STORE_2X
+    ZERO_BLOCK      blockq, 16, 8, m8
     VP9_IDCT8_WRITEOUT
     RET
+%undef W_11585x2_REG
 %endmacro
 
 %define PSIGNW PSIGNW_MMX
