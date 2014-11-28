@@ -463,8 +463,10 @@ IADST4_FN iadst, IADST4, iadst, IADST4, ssse3
 %endmacro
 
 ; x86-32
-; in: m0/m4 is in mem
-; out: m6 is in mem
+; - in: m0/m4 is in mem
+; - out: m6 is in mem
+; x86-64:
+; - everything is in registers (m0-7)
 %macro VP9_IDCT8_1D 0
 %if ARCH_X86_64
     SWAP                 0, 8
@@ -581,6 +583,11 @@ IADST4_FN iadst, IADST4, iadst, IADST4, ssse3
     VP9_STORE_2X        %1, %2, %3, %4, %5
 %endmacro
 
+; x86-32:
+; - m6 is in mem
+; x86-64:
+; - m8 holds m6 (SWAP)
+; m6 holds zero
 %macro VP9_IDCT8_WRITEOUT 0
 %if ARCH_X86_64
     mova                m9, [pw_1024]
@@ -790,68 +797,163 @@ VP9_IDCT_IDCT_8x8_ADD_XMM sse2
 VP9_IDCT_IDCT_8x8_ADD_XMM ssse3
 VP9_IDCT_IDCT_8x8_ADD_XMM avx
 
-%if ARCH_X86_64 ; TODO: 32-bit? (32-bit limited to 8 xmm reg, we use more)
-
 ;---------------------------------------------------------------------------------------------
 ; void vp9_iadst_iadst_8x8_add_<opt>(uint8_t *dst, ptrdiff_t stride, int16_t *block, int eob);
 ;---------------------------------------------------------------------------------------------
 
-%macro VP9_IADST8_WRITEOUT 0
-%if ARCH_X86_64
-    mova                m9, [pw_1024]
-%define W_1024_REG m9
-%else
-%define W_1024_REG [pw_1024]
-%endif
-    VP9_IDCT8_WRITEx2    0,  1, 10, 11, 8, W_1024_REG
-    lea               dstq, [dstq+2*strideq]
-    VP9_IDCT8_WRITEx2    2,  3, 10, 11, 8, W_1024_REG
-    lea               dstq, [dstq+2*strideq]
-    VP9_IDCT8_WRITEx2    4,  5, 10, 11, 8, W_1024_REG
-    lea               dstq, [dstq+2*strideq]
-    VP9_IDCT8_WRITEx2    6,  7, 10, 11, 8, W_1024_REG
-%endmacro
-
+; x86-32:
+; - in: m0/3/4/7 are in mem [blockq+N*16]
+; - out: m6 is in mem [blockq+0]
+; x86-64:
+; - everything is in registers
 %macro VP9_IADST8_1D 0 ; input/output=m0/1/2/3/4/5/6/7
-    VP9_UNPACK_MULSUB_2D_4X  7,  0,  8,  9, 16305,  1606    ; m7/8=t1[d], m0/9=t0[d]
-    VP9_UNPACK_MULSUB_2D_4X  3,  4, 10, 13, 10394, 12665    ; m3/10=t5[d], m4/13=t4[d]
-    VP9_RND_SH_SUMSUB_BA     4,  0, 13,  9, 14, D_8192_REG  ; m4=t0[w], m0=t4[w]
-    VP9_RND_SH_SUMSUB_BA     3,  7, 10,  8, 14, D_8192_REG  ; m3=t1[w], m7=t5[w]
+%if ARCH_X86_64
+    SWAP                     0, 8
+    SWAP                     3, 9
+    SWAP                     4, 10
+    SWAP                     7, 11
+%endif
 
-    VP9_UNPACK_MULSUB_2D_4X  5,  2,  8,  9, 14449,  7723    ; m5/8=t3[d], m2/9=t2[d]
-    VP9_UNPACK_MULSUB_2D_4X  1,  6, 10, 13,  4756, 15679    ; m1/10=t7[d], m6/13=t6[d]
-    VP9_RND_SH_SUMSUB_BA     6,  2, 13,  9, 14, D_8192_REG  ; m6=t2[w], m2=t6[w]
-    VP9_RND_SH_SUMSUB_BA     1,  5, 10,  8, 14, D_8192_REG  ; m1=t3[w], m5=t7[w]
+    VP9_UNPACK_MULSUB_2D_4X  5,  2,  0,  3, 14449,  7723    ; m5/2=t3[d], m2/4=t2[d]
+    VP9_UNPACK_MULSUB_2D_4X  1,  6,  4,  7,  4756, 15679    ; m1/4=t7[d], m6/7=t6[d]
+
+%if ARCH_X86_64
+    SWAP 4, 12
+%else
+    mova [blockq+16], m4
+%endif
+
+    VP9_RND_SH_SUMSUB_BA     6,  2,  7,  3, 4, D_8192_REG  ; m6=t2[w], m2=t6[w]
+
+%if ARCH_X86_64
+    SWAP 4, 12
+%else
+    mova m4, [blockq+16]
+%endif
+
+    VP9_RND_SH_SUMSUB_BA     1,  5,  4,  0, 3, D_8192_REG  ; m1=t3[w], m5=t7[w]
+
+%if ARCH_X86_64
+    SWAP                     0, 8
+    SWAP                     3, 9
+    SWAP                     4, 10
+    SWAP                     7, 11
+    SWAP                     1, 8
+    SWAP                     2, 9
+    SWAP                     5, 10
+    SWAP                     6, 11
+%else
+    mova         [blockq+16*1], m1
+    mova         [blockq+16*2], m2
+    mova         [blockq+16*5], m5
+    mova         [blockq+16*6], m6
+    mova                    m0, [blockq+16*0]
+    mova                    m3, [blockq+16*3]
+    mova                    m4, [blockq+16*4]
+    mova                    m7, [blockq+16*7]
+%endif
+
+    VP9_UNPACK_MULSUB_2D_4X  7,  0,  1,  2, 16305,  1606    ; m7/1=t1[d], m0/2=t0[d]
+    VP9_UNPACK_MULSUB_2D_4X  3,  4,  5,  6, 10394, 12665    ; m3/5=t5[d], m4/6=t4[d]
+
+%if ARCH_X86_64
+    SWAP 1, 12
+%else
+    mova [blockq+ 0], m1
+%endif
+
+    VP9_RND_SH_SUMSUB_BA     4,  0,  6,  2, 1, D_8192_REG  ; m4=t0[w], m0=t4[w]
+
+%if ARCH_X86_64
+    SWAP 1, 12
+%else
+    mova m1, [blockq+ 0]
+%endif
+
+    VP9_RND_SH_SUMSUB_BA     3,  7,  5,  1, 2, D_8192_REG  ; m3=t1[w], m7=t5[w]
+
+%if ARCH_X86_64
+    SWAP                     1, 8
+    SWAP                     2, 9
+    SWAP                     5, 10
+    SWAP                     6, 11
+    SWAP                     1, 8
+    SWAP                     3, 9
+    SWAP                     4, 10
+    SWAP                     6, 11
+%else
+    mova        [blockq+16*3], m3
+    mova        [blockq+16*4], m4
+    mova                   m2, [blockq+16*2]
+    mova                   m5, [blockq+16*5]
+%endif
 
     ; m4=t0, m3=t1, m6=t2, m1=t3, m0=t4, m7=t5, m2=t6, m5=t7
 
-    VP9_UNPACK_MULSUB_2D_4X  0,  7,  8,  9, 15137,  6270    ; m0/8=t5[d], m7/9=t4[d]
-    VP9_UNPACK_MULSUB_2D_4X  5,  2, 10, 13,  6270, 15137    ; m5/10=t6[d], m2/13=t7[d]
-    VP9_RND_SH_SUMSUB_BA     5,  7, 10,  9, 14, D_8192_REG
-    PSIGNW                  m5, W_M1_REG                    ; m5=out1[w], m7=t6[w]
-    VP9_RND_SH_SUMSUB_BA     2,  0, 13,  8, 14, D_8192_REG  ; m2=out6[w], m0=t7[w]
+    VP9_UNPACK_MULSUB_2D_4X  0,  7,  1,  3, 15137,  6270    ; m0/1=t5[d], m7/3=t4[d]
+    VP9_UNPACK_MULSUB_2D_4X  5,  2,  4,  6,  6270, 15137    ; m5/4=t6[d], m2/6=t7[d]
 
-    SUMSUB_BA                w,  6,  4, 8                   ; m6=out0[w], m4=t2[w]
-    SUMSUB_BA                w,  1,  3, 8
+%if ARCH_X86_64
+    SWAP 1, 12
+%else
+    mova [blockq+ 0], m1
+%endif
+
+    VP9_RND_SH_SUMSUB_BA     5,  7,  4,  3, 1, D_8192_REG
+
+%if ARCH_X86_64
+    SWAP 1, 12
+%else
+    mova m1, [blockq+ 0]
+%endif
+
+    PSIGNW                  m5, W_M1_REG                    ; m5=out1[w], m7=t6[w]
+    VP9_RND_SH_SUMSUB_BA     2,  0,  6,  1, 3, D_8192_REG   ; m2=out6[w], m0=t7[w]
+
+%if ARCH_X86_64
+    SWAP                     1, 8
+    SWAP                     3, 9
+    SWAP                     4, 10
+    SWAP                     6, 11
+    SWAP                     2, 8
+    SWAP                     5, 9
+%else
+    mova                    m1, [blockq+16*1]
+    mova                    m3, [blockq+16*3]
+    mova                    m4, [blockq+16*4]
+    mova                    m6, [blockq+16*6]
+    mova           [blockq+ 0], m2
+    mova           [blockq+16], m5
+%endif
+
+    SUMSUB_BA                w,  6,  4, 2                   ; m6=out0[w], m4=t2[w]
+    SUMSUB_BA                w,  1,  3, 2
     PSIGNW                  m1, W_M1_REG                    ; m1=out7[w], m3=t3[w]
 
     ; m6=out0, m5=out1, m4=t2, m3=t3, m7=t6, m0=t7, m2=out6, m1=out7
 
 %if cpuflag(ssse3)
-    SUMSUB_BA                w,  3,  4,  8
-    SUMSUB_BA                w,  0,  7,  9
+    SUMSUB_BA                w,  3,  4,  2
+    SUMSUB_BA                w,  0,  7,  2
     pmulhrsw                m3, W_11585x2_REG
     pmulhrsw                m7, W_11585x2_REG
     pmulhrsw                m4, W_11585x2_REG               ; out4
     pmulhrsw                m0, W_11585x2_REG               ; out2
 %else
-    VP9_UNPACK_MULSUB_2W_4X  4, 3, 11585, 11585, D_8192_REG, 12, 13
-    VP9_UNPACK_MULSUB_2W_4X  7, 0, 11585, 11585, D_8192_REG, 12, 13
+    VP9_UNPACK_MULSUB_2W_4X  4, 3, 11585, 11585, D_8192_REG, 2, 5
+    VP9_UNPACK_MULSUB_2W_4X  7, 0, 11585, 11585, D_8192_REG, 2, 5
 %endif
     PSIGNW                  m3, W_M1_REG                    ; out3
     PSIGNW                  m7, W_M1_REG                    ; out5
 
     ; m6=out0, m5=out1, m0=out2, m3=out3, m4=out4, m7=out5, m2=out6, m1=out7
+
+%if ARCH_X86_64
+    SWAP                     2, 8
+    SWAP                     5, 9
+%else
+    mova           [blockq+16], m5
+%endif
 
     SWAP                     0, 6, 2
     SWAP                     7, 1, 5
@@ -859,38 +961,77 @@ VP9_IDCT_IDCT_8x8_ADD_XMM avx
 
 %macro IADST8_FN 5
 INIT_XMM %5
-cglobal vp9_%1_%3_8x8_add, 3, 3, 16, dst, stride, block, eob
+cglobal vp9_%1_%3_8x8_add, 3, 3, 15 + cpuflag(ssse3), dst, stride, block, eob
+
+%ifidn %1, idct
+%define first_is_idct 1
+%else
+%define first_is_idct 0
+%endif
+
+%ifidn %3, idct
+%define second_is_idct 1
+%else
+%define second_is_idct 0
+%endif
+
+%if ARCH_X86_64
     mova                m0, [blockq+  0]    ; IN(0)
+%endif
     mova                m1, [blockq+ 16]    ; IN(1)
     mova                m2, [blockq+ 32]    ; IN(2)
+%if ARCH_X86_64 || first_is_idct
     mova                m3, [blockq+ 48]    ; IN(3)
+%endif
+%if ARCH_X86_64
     mova                m4, [blockq+ 64]    ; IN(4)
+%endif
     mova                m5, [blockq+ 80]    ; IN(5)
     mova                m6, [blockq+ 96]    ; IN(6)
+%if ARCH_X86_64 || first_is_idct
     mova                m7, [blockq+112]    ; IN(7)
+%endif
 %if ARCH_X86_64
 %if cpuflag(ssse3)
-    mova               m12, [pw_11585x2]    ; often used
+    mova               m15, [pw_11585x2]    ; often used
 %endif
-    mova               m11, [pd_8192]       ; rounding
-    mova               m15, [pw_m1]
-%define W_11585x2_REG m12
-%define D_8192_REG m11
-%define W_M1_REG m15
+    mova               m13, [pd_8192]       ; rounding
+    mova               m14, [pw_m1]
+%define W_11585x2_REG m15
+%define D_8192_REG m13
+%define W_M1_REG m14
 %else
 %define W_11585x2_REG [pw_11585x2]
 %define D_8192_REG [pd_8192]
 %define W_M1_REG [pw_m1]
 %endif
+
+    ; note different calling conventions for idct8 vs. iadst8 on x86-32
     VP9_%2_1D
+%if ARCH_X86_64
     TRANSPOSE8x8W  0, 1, 2, 3, 4, 5, 6, 7, 8
+%else
+    TRANSPOSE8x8W  0, 1, 2, 3, 4, 5, 6, 7, [blockq+0], [blockq+64], 1
+    mova      [blockq+  0], m0
+%if second_is_idct == 0
+    mova      [blockq+ 48], m3
+    mova      [blockq+112], m7
+%endif
+%endif
     VP9_%4_1D
 
-    pxor                m8, m8  ; used for the block reset, and VP9_STORE_2X
-    ZERO_BLOCK      blockq, 16, 8, m8
-    VP9_IADST8_WRITEOUT
+%if ARCH_X86_64
+    SWAP                 6, 8
+%endif
+    pxor                m6, m6  ; used for the block reset, and VP9_STORE_2X
+    VP9_IDCT8_WRITEOUT
+    ZERO_BLOCK      blockq, 16, 8, m6
     RET
+
 %undef W_11585x2_REG
+%undef first_is_idct
+%undef second_is_idct
+
 %endmacro
 
 %define PSIGNW PSIGNW_MMX
@@ -905,6 +1046,8 @@ IADST8_FN iadst, IADST8, idct,  IDCT8,  avx
 IADST8_FN iadst, IADST8, iadst, IADST8, ssse3
 IADST8_FN iadst, IADST8, iadst, IADST8, avx
 %undef PSIGNW
+
+%if ARCH_X86_64 ; TODO: 32-bit? (32-bit limited to 8 xmm reg, we use more)
 
 ;---------------------------------------------------------------------------------------------
 ; void vp9_idct_idct_16x16_add_<opt>(uint8_t *dst, ptrdiff_t stride, int16_t *block, int eob);
