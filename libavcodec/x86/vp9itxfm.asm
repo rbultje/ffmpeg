@@ -71,6 +71,8 @@ pw_13377_m13377: times 4 dw 13377, -13377
 pd_8192: times 4 dd 8192
 
 cextern pw_8
+cextern pw_16
+cextern pw_32
 cextern pw_512
 cextern pw_1024
 cextern pw_2048
@@ -577,9 +579,16 @@ IADST4_FN iadst, IADST4, iadst, IADST4, ssse3
     SWAP                 3,  5,  0
 %endmacro
 
-%macro VP9_IDCT8_WRITEx2 6 ; line1, line2, tmp1, tmp2, zero, pw_1024
+%macro VP9_IDCT8_WRITEx2 6-7 5 ; line1, line2, tmp1, tmp2, zero, pw_1024/pw_16, shift
+%if cpuflag(ssse3)
     pmulhrsw           m%1, %6              ; (x*1024 + (1<<14))>>15 <=> (x+16)>>5
     pmulhrsw           m%2, %6
+%else
+    paddw              m%1, %6
+    paddw              m%2, %6
+    psraw              m%1, %7
+    psraw              m%2, %7
+%endif
     VP9_STORE_2X        %1, %2, %3, %4, %5
 %endmacro
 
@@ -590,18 +599,26 @@ IADST4_FN iadst, IADST4, iadst, IADST4, ssse3
 ; m6 holds zero
 %macro VP9_IDCT8_WRITEOUT 0
 %if ARCH_X86_64
+%if cpuflag(ssse3)
     mova                m9, [pw_1024]
-%define W_1024_REG m9
+%else
+    mova                m9, [pw_16]
+%endif
+%define ROUND_REG m9
     SWAP                 5, 10
     SWAP                 7, 11
 %else
-%define W_1024_REG [pw_1024]
+%if cpuflag(ssse3)
+%define ROUND_REG [pw_1024]
+%else
+%define ROUND_REG [pw_16]
+%endif
     mova       [blockq+16], m5
     mova       [blockq+32], m7
 %endif
-    VP9_IDCT8_WRITEx2    0,  1, 5, 7, 6, W_1024_REG
+    VP9_IDCT8_WRITEx2    0,  1, 5, 7, 6, ROUND_REG
     lea               dstq, [dstq+2*strideq]
-    VP9_IDCT8_WRITEx2    2,  3, 5, 7, 6, W_1024_REG
+    VP9_IDCT8_WRITEx2    2,  3, 5, 7, 6, ROUND_REG
     lea               dstq, [dstq+2*strideq]
 
 %if ARCH_X86_64
@@ -612,14 +629,16 @@ IADST4_FN iadst, IADST4, iadst, IADST4, ssse3
     mova                m7, [blockq+32]
 %endif
 
-    VP9_IDCT8_WRITEx2    4,  5, 0, 1, 6, W_1024_REG
+    VP9_IDCT8_WRITEx2    4,  5, 0, 1, 6, ROUND_REG
     lea               dstq, [dstq+2*strideq]
 %if ARCH_X86_64
     SWAP                 5, 8
 %else
     mova                m5, [blockq+ 0]
 %endif
-    VP9_IDCT8_WRITEx2    5,  7, 0, 1, 6, W_1024_REG
+    VP9_IDCT8_WRITEx2    5,  7, 0, 1, 6, ROUND_REG
+
+%undef ROUND_REG
 %endmacro
 
 %macro VP9_IDCT_IDCT_8x8_ADD_XMM 1
@@ -952,7 +971,7 @@ VP9_IDCT_IDCT_8x8_ADD_XMM avx
     SWAP                     2, 8
     SWAP                     5, 9
 %else
-    mova           [blockq+16], m5
+    mova                    m5, [blockq+16]
 %endif
 
     SWAP                     0, 6, 2
@@ -1141,9 +1160,13 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
     ; m8=t0, m9=t1, m10=t2, m11=t3, m12=t4, m14=t5, m13=t6, m15=t7
     ; m3=t8, m5=t9, m1=t10, m7=t11, m0=t12, m6=t13, m2=t14, m4=t15
 
+%if cpuflag(ssse3)
     SUMSUB_BA            w, 14, 13, 10
     pmulhrsw           m13, [pw_11585x2]                              ; t5
     pmulhrsw           m14, [pw_11585x2]                              ; t6
+%else
+    VP9_UNPACK_MULSUB_2W_4X  13,  14, 11585, 11585, [pd_8192], 10, 11 ; t5,  t6
+%endif
     VP9_UNPACK_MULSUB_2W_4X   2,   5, 15137,  6270, [pd_8192], 10, 11 ; t9,  t14
     VP9_UNPACK_MULSUB_2W_4X   6,   1, 6270, m15137, [pd_8192], 10, 11 ; t10, t13
 %endif
@@ -1159,12 +1182,17 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
     ; m15=t0, m14=t1, m13=t2, m12=t3, m11=t4, m10=t5, m9=t6, m8=t7
     ; m7=t8, m6=t9, m2=t10, m3=t11, m4=t12, m5=t13, m1=t14, m0=t15
 
+%if cpuflag(ssse3)
     SUMSUB_BA            w,  2,  5, 10
     SUMSUB_BA            w,  3,  4, 10
     pmulhrsw            m5, [pw_11585x2]    ; t10
     pmulhrsw            m4, [pw_11585x2]    ; t11
     pmulhrsw            m3, [pw_11585x2]    ; t12
     pmulhrsw            m2, [pw_11585x2]    ; t13
+%else
+    VP9_UNPACK_MULSUB_2W_4X   5,   2, 11585, 11585, [pd_8192], 10, 11 ; t10, t13
+    VP9_UNPACK_MULSUB_2W_4X   4,   3, 11585, 11585, [pd_8192], 10, 11 ; t11, t12
+%endif
 
     ; backup first register
     mova              [%4], m7
@@ -1193,9 +1221,15 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
     mova               m11, [%1+ 8*%3]      ; IN(8)
 
     ; from 3 stages back
+%if cpuflag(ssse3)
     SUMSUB_BA            w, 11, 10, 7
     pmulhrsw           m11, [pw_11585x2]    ; t0
     pmulhrsw           m10, [pw_11585x2]    ; t1
+%else
+    mova        [%1+ 0*%3], m8
+    VP9_UNPACK_MULSUB_2W_4X 10,  11, 11585,  11585, [pd_8192], 7, 8 ; t0, t1
+    mova                m8, [%1+ 0*%3]
+%endif
 
     ; from 2 stages back
     SUMSUB_BA            w,  8, 11, 7       ; t0,  t3
@@ -1253,18 +1287,18 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
     mova         [tmpq+64], m8
     mova         [tmpq+96], m9
 
+%if cpuflag(ssse3)
+%define ROUND_REG [pw_512]
+%else
+%define ROUND_REG [pw_32]
+%endif
+
     pxor                m7, m7
-    pmulhrsw            m0, [pw_512]
-    pmulhrsw            m1, [pw_512]
-    VP9_STORE_2X         0,  1,  8,  9,  7
+    VP9_IDCT8_WRITEx2    0,  1, 8, 9, 7, ROUND_REG, 6
     lea               dstq, [dstq+strideq*2]
-    pmulhrsw            m2, [pw_512]
-    pmulhrsw            m3, [pw_512]
-    VP9_STORE_2X         2,  3,  8,  9,  7
+    VP9_IDCT8_WRITEx2    2,  3, 8, 9, 7, ROUND_REG, 6
     lea               dstq, [dstq+strideq*2]
-    pmulhrsw            m4, [pw_512]
-    pmulhrsw            m5, [pw_512]
-    VP9_STORE_2X         4,  5,  8,  9,  7
+    VP9_IDCT8_WRITEx2    4,  5, 8, 9, 7, ROUND_REG, 6
     lea               dstq, [dstq+strideq*2]
 
     ; restore from cache
@@ -1276,25 +1310,15 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
     SUMSUB_BA            w,  6,  9, 1       ; t6, t9
     SUMSUB_BA            w,  7,  8, 1       ; t7, t8
 
-    pmulhrsw            m6, [pw_512]
-    pmulhrsw            m7, [pw_512]
-    VP9_STORE_2X         6,  7,  1,  2,  0
+    VP9_IDCT8_WRITEx2    6,  7, 1, 2, 0, ROUND_REG, 6
     lea               dstq, [dstq+strideq*2]
-    pmulhrsw            m8, [pw_512]
-    pmulhrsw            m9, [pw_512]
-    VP9_STORE_2X         8,  9,  1,  2,  0
+    VP9_IDCT8_WRITEx2    8,  9, 1, 2, 0, ROUND_REG, 6
     lea               dstq, [dstq+strideq*2]
-    pmulhrsw           m10, [pw_512]
-    pmulhrsw           m11, [pw_512]
-    VP9_STORE_2X        10, 11,  1,  2,  0
+    VP9_IDCT8_WRITEx2   10, 11, 1, 2, 0, ROUND_REG, 6
     lea               dstq, [dstq+strideq*2]
-    pmulhrsw           m12, [pw_512]
-    pmulhrsw           m13, [pw_512]
-    VP9_STORE_2X        12, 13,  1,  2,  0
+    VP9_IDCT8_WRITEx2   12, 13, 1, 2, 0, ROUND_REG, 6
     lea               dstq, [dstq+strideq*2]
-    pmulhrsw           m14, [pw_512]
-    pmulhrsw           m15, [pw_512]
-    VP9_STORE_2X        14, 15,  1,  2,  0
+    VP9_IDCT8_WRITEx2   14, 15, 1, 2, 0, ROUND_REG, 6
 %endif ; %2 == 1/2
 %endmacro
 
@@ -1318,19 +1342,38 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
 %macro VP9_IDCT_IDCT_16x16_ADD_XMM 1
 INIT_XMM %1
 cglobal vp9_idct_idct_16x16_add, 4, 6, 16, 512, dst, stride, block, eob
+%if cpuflag(ssse3)
     ; 2x2=eob=3, 4x4=eob=10
     cmp eobd, 38
     jg .idctfull
     cmp eobd, 1 ; faster path for when only DC is set
     jne .idct8x8
+%else
+    cmp eobd, 1 ; faster path for when only DC is set
+    jg .idctfull
+%endif
 
     ; dc-only
+%if cpuflag(ssse3)
     movd                m0, [blockq]
     mova                m1, [pw_11585x2]
     pmulhrsw            m0, m1
     pmulhrsw            m0, m1
+%else
+    DEFINE_ARGS dst, stride, block, coef
+    movsx            coefd, word [blockq]
+    imul             coefd, 11585
+    add              coefd, 8192
+    sar              coefd, 14
+    imul             coefd, 11585
+    add              coefd, (32 << 14) + 8192
+    sar              coefd, 14 + 6
+    movd                m0, coefd
+%endif
     SPLATW              m0, m0, q0000
+%if cpuflag(ssse3)
     pmulhrsw            m0, [pw_512]
+%endif
     pxor                m5, m5
     movd          [blockq], m5
 %rep 7
@@ -1341,6 +1384,7 @@ cglobal vp9_idct_idct_16x16_add, 4, 6, 16, 512, dst, stride, block, eob
     RET
 
     DEFINE_ARGS dst, stride, block, cnt, dst_bak, tmp
+%if cpuflag(ssse3)
 .idct8x8:
     mov               tmpq, rsp
     VP9_IDCT16_1D   blockq, 1, 8
@@ -1358,6 +1402,7 @@ cglobal vp9_idct_idct_16x16_add, 4, 6, 16, 512, dst, stride, block, eob
     ; use that to zero out block coefficients
     ZERO_BLOCK      blockq, 32, 8, m0
     RET
+%endif
 
 .idctfull:
     mov               cntd, 2
@@ -1386,6 +1431,7 @@ cglobal vp9_idct_idct_16x16_add, 4, 6, 16, 512, dst, stride, block, eob
     RET
 %endmacro
 
+VP9_IDCT_IDCT_16x16_ADD_XMM sse2
 VP9_IDCT_IDCT_16x16_ADD_XMM ssse3
 VP9_IDCT_IDCT_16x16_ADD_XMM avx
 
