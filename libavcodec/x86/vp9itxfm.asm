@@ -1319,6 +1319,8 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
     VP9_IDCT8_WRITEx2   12, 13, 1, 2, 0, ROUND_REG, 6
     lea               dstq, [dstq+strideq*2]
     VP9_IDCT8_WRITEx2   14, 15, 1, 2, 0, ROUND_REG, 6
+
+%undef ROUND_REG
 %endif ; %2 == 1/2
 %endmacro
 
@@ -1506,18 +1508,24 @@ VP9_IDCT_IDCT_16x16_ADD_XMM avx
     VP9_UNPACK_MULSUB_2D_4X 11, 10, 13, 14,  6270, 15137    ; m11/13=t14[d], m10/14=t15[d]
     VP9_RND_SH_SUMSUB_BA    11,  0, 13,  7, 15, [pd_8192]   ; m11=out2[w], m0=t14[w]
     VP9_RND_SH_SUMSUB_BA    10,  1, 14,  6, 15, [pd_8192]
-    psignw                 m10, [pw_m1]                     ; m10=out13[w], m1=t15[w]
+    PSIGNW                 m10, [pw_m1]                     ; m10=out13[w], m1=t15[w]
 
     SUMSUB_BA                w,  3,  5, 15
-    psignw                  m3, [pw_m1]                     ; m3=out1[w], m5=t10[w]
+    PSIGNW                  m3, [pw_m1]                     ; m3=out1[w], m5=t10[w]
     SUMSUB_BA                w,  2,  4, 15                  ; m2=out14[w], m4=t11[w]
 
+%if cpuflag(ssse3)
     SUMSUB_BA                w,  5,  4, 15
     pmulhrsw                m5, [pw_11585x2]                ; m5=out6[w]
     pmulhrsw                m4, [pw_11585x2]                ; m4=out9[w]
     SUMSUB_BA                w,  1,  0, 15
     pmulhrsw                m1, [pw_m11585x2]               ; m1=out5[w]
     pmulhrsw                m0, [pw_11585x2]                ; m0=out10[w]
+%else
+    VP9_UNPACK_MULSUB_2W_4X  4,  5, 11585, 11585, [pd_8192], 7, 15
+    PSIGNW                  m1, [pw_m1]
+    VP9_UNPACK_MULSUB_2W_4X  1,  0, 11585, 11585, [pd_8192], 7, 15
+%endif
 
     ; m3=out1, m11=out2, m1=out5, m5=out6, m4=out9, m0=out10, m10=out13, m2=out14
 
@@ -1543,18 +1551,24 @@ VP9_IDCT_IDCT_16x16_ADD_XMM avx
     VP9_UNPACK_MULSUB_2D_4X  6,  7,  0,  2, 15137,  6270    ; m6/0=t5[d], m7/2=t4[d]
     VP9_UNPACK_MULSUB_2D_4X 14, 13,  4,  5,  6270, 15137    ; m14/4=t6[d], m13/5=t7[d]
     VP9_RND_SH_SUMSUB_BA    14,  7,  4,  2, 10, [pd_8192]
-    psignw                 m14, [pw_m1]                     ; m14=out3[w], m7=t6[w]
+    PSIGNW                 m14, [pw_m1]                     ; m14=out3[w], m7=t6[w]
     VP9_RND_SH_SUMSUB_BA    13,  6,  5,  0, 10, [pd_8192]   ; m13=out12[w], m6=t7[w]
     SUMSUB_BA                w,  9, 15, 10                  ; m9=out0[w], m15=t2[w]
     SUMSUB_BA                w,  8, 12, 10
-    psignw                  m8, [pw_m1]                     ; m8=out15[w], m12=t3[w]
+    PSIGNW                  m8, [pw_m1]                     ; m8=out15[w], m12=t3[w]
 
+%if cpuflag(ssse3)
     SUMSUB_BA                w, 12, 15, 10
     pmulhrsw               m12, [pw_m11585x2]               ; m12=out7[w]
     pmulhrsw               m15, [pw_11585x2]                ; m15=out8[w]
     SUMSUB_BA                w,  7,  6, 10
     pmulhrsw                m7, [pw_11585x2]                ; m7=out4[w]
     pmulhrsw                m6, [pw_11585x2]                ; m6=out11[w]
+%else
+    PSIGNW                 m12, [pw_m1]
+    VP9_UNPACK_MULSUB_2W_4X 12, 15, 11585, 11585, [pd_8192], 0, 10
+    VP9_UNPACK_MULSUB_2W_4X  6,  7, 11585, 11585, [pd_8192], 0, 10
+%endif
 
     ; m9=out0, m14=out3, m7=out4, m12=out7, m15=out8, m6=out11, m13=out12, m8=out15
     ; m3=out1, m11=out2, m1=out5, r8=out6, r9=out9, r10=out10, r11=out13, r12=out14
@@ -1588,21 +1602,19 @@ VP9_IDCT_IDCT_16x16_ADD_XMM avx
     mova                    m5, [tmpq+ 8*%%str]
     pxor                    m0, m0
 
-    pmulhrsw                m9, [pw_512]
-    pmulhrsw                m3, [pw_512]
-    VP9_STORE_2X             9,  3, 2, 4, 0
+%if cpuflag(ssse3)
+%define ROUND_REG [pw_512]
+%else
+%define ROUND_REG [pw_32]
+%endif
+
+    VP9_IDCT8_WRITEx2        9,  3, 2, 4, 0, ROUND_REG, 6
     lea                   dstq, [dstq+strideq*2]
-    pmulhrsw               m11, [pw_512]
-    pmulhrsw               m14, [pw_512]
-    VP9_STORE_2X            11, 14, 2, 4, 0
+    VP9_IDCT8_WRITEx2       11, 14, 2, 4, 0, ROUND_REG, 6
     lea                   dstq, [dstq+strideq*2]
-    pmulhrsw                m7, [pw_512]
-    pmulhrsw                m1, [pw_512]
-    VP9_STORE_2X             7,  1, 2, 4, 0
+    VP9_IDCT8_WRITEx2        7,  1, 2, 4, 0, ROUND_REG, 6
     lea                   dstq, [dstq+strideq*2]
-    pmulhrsw                m5, [pw_512]
-    pmulhrsw               m12, [pw_512]
-    VP9_STORE_2X             5, 12, 2, 4, 0
+    VP9_IDCT8_WRITEx2        5, 12, 2, 4, 0, ROUND_REG, 6
     lea                   dstq, [dstq+strideq*2]
 
     mova                    m9, [tmpq+ 9*%%str]
@@ -1610,21 +1622,15 @@ VP9_IDCT_IDCT_16x16_ADD_XMM avx
     mova                   m11, [tmpq+11*%%str]
     mova                   m14, [tmpq+12*%%str]
 
-    pmulhrsw               m15, [pw_512]
-    pmulhrsw                m9, [pw_512]
-    VP9_STORE_2X            15,  9, 2, 4, 0
+    VP9_IDCT8_WRITEx2       15,  9, 2, 4, 0, ROUND_REG, 6
     lea                   dstq, [dstq+strideq*2]
-    pmulhrsw                m3, [pw_512]
-    pmulhrsw                m6, [pw_512]
-    VP9_STORE_2X             3,  6, 2, 4, 0
+    VP9_IDCT8_WRITEx2        3,  6, 2, 4, 0, ROUND_REG, 6
     lea                   dstq, [dstq+strideq*2]
-    pmulhrsw               m13, [pw_512]
-    pmulhrsw               m11, [pw_512]
-    VP9_STORE_2X            13, 11, 2, 4, 0
+    VP9_IDCT8_WRITEx2       13, 11, 2, 4, 0, ROUND_REG, 6
     lea                   dstq, [dstq+strideq*2]
-    pmulhrsw               m14, [pw_512]
-    pmulhrsw                m8, [pw_512]
-    VP9_STORE_2X            14,  8, 2, 4, 0
+    VP9_IDCT8_WRITEx2       14,  8, 2, 4, 0, ROUND_REG, 6
+
+%undef ROUND_REG
 %endif
 %endmacro
 
@@ -1657,12 +1663,18 @@ cglobal vp9_%1_%3_16x16_add, 3, 6, 16, 512, dst, stride, block, cnt, dst_bak, tm
     RET
 %endmacro
 
+%define PSIGNW PSIGNW_MMX
+IADST16_FN idct,  IDCT16,  iadst, IADST16, sse2
+IADST16_FN iadst, IADST16, idct,  IDCT16,  sse2
+IADST16_FN iadst, IADST16, iadst, IADST16, sse2
+%define PSIGNW PSIGNW_SSSE3
 IADST16_FN idct,  IDCT16,  iadst, IADST16, ssse3
-IADST16_FN idct,  IDCT16,  iadst, IADST16, avx
 IADST16_FN iadst, IADST16, idct,  IDCT16,  ssse3
-IADST16_FN iadst, IADST16, idct,  IDCT16,  avx
 IADST16_FN iadst, IADST16, iadst, IADST16, ssse3
+IADST16_FN idct,  IDCT16,  iadst, IADST16, avx
+IADST16_FN iadst, IADST16, idct,  IDCT16,  avx
 IADST16_FN iadst, IADST16, iadst, IADST16, avx
+%undef PSIGNW
 
 ;---------------------------------------------------------------------------------------------
 ; void vp9_idct_idct_32x32_add_<opt>(uint8_t *dst, ptrdiff_t stride, int16_t *block, int eob);
