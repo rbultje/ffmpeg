@@ -579,7 +579,7 @@ IADST4_FN iadst, IADST4, iadst, IADST4, ssse3
     SWAP                 3,  5,  0
 %endmacro
 
-%macro VP9_IDCT8_WRITEx2 6-7 5 ; line1, line2, tmp1, tmp2, zero, pw_1024/pw_16, shift
+%macro VP9_IDCT8_WRITEx2 6-8 5 ; line1, line2, tmp1, tmp2, zero, pw_1024/pw_16, shift
 %if cpuflag(ssse3)
     pmulhrsw           m%1, %6              ; (x*1024 + (1<<14))>>15 <=> (x+16)>>5
     pmulhrsw           m%2, %6
@@ -589,7 +589,11 @@ IADST4_FN iadst, IADST4, iadst, IADST4, ssse3
     psraw              m%1, %7
     psraw              m%2, %7
 %endif
+%if %0 <= 7
     VP9_STORE_2X        %1, %2, %3, %4, %5
+%else
+    VP9_STORE_2X        %1, %2, %3, %4, %5, %8
+%endif
 %endmacro
 
 ; x86-32:
@@ -1840,12 +1844,19 @@ IADST16_FN iadst, IADST16, iadst, IADST16, avx
     ; from 2 stages forward
     SUMSUB_BA             w,  0,  8,  4
     SUMSUB_BA             w, 15,  7,  4
+
+    ; store t16
+    mova    [tmpq+ 1*%%str], m0     ; t16
+
     ; from 3 stages forward
+%if cpuflag(ssse3)
     SUMSUB_BA             w,  8,  7,  4
     pmulhrsw             m7, [pw_11585x2]
     pmulhrsw             m8, [pw_11585x2]
-    ; store t16/t23
-    mova    [tmpq+ 1*%%str], m0     ; t16
+%else
+    VP9_UNPACK_MULSUB_2W_4X 7, 8, 11585, 11585, [pd_8192], 4, 0
+%endif
+    ; store t23
     mova    [tmpq+29*%%str], m7     ; t23
 
     mova                 m4, [tmpq+21*%%str] ; t19
@@ -1867,6 +1878,7 @@ IADST16_FN iadst, IADST16, iadst, IADST16, avx
     ; m0=t16, m1=t17, m2=t18, m3=t19, m11=t20, m10=t21, m9=t22, m8=t23,
     ; m7=t24, m6=t25, m5=t26, m4=t27, m12=t28, m13=t29, m14=t30, m15=t31
 
+%if cpuflag(ssse3)
     SUMSUB_BA             w,  9,  6,  0
     SUMSUB_BA             w, 10,  5,  0
     SUMSUB_BA             w, 11,  4,  0
@@ -1877,6 +1889,11 @@ IADST16_FN iadst, IADST16, iadst, IADST16, avx
     pmulhrsw            m10, [pw_11585x2]
     pmulhrsw             m4, [pw_11585x2]
     pmulhrsw            m11, [pw_11585x2]
+%else
+    VP9_UNPACK_MULSUB_2W_4X 6,  9, 11585, 11585, [pd_8192], 0, 7
+    VP9_UNPACK_MULSUB_2W_4X 5, 10, 11585, 11585, [pd_8192], 0, 7
+    VP9_UNPACK_MULSUB_2W_4X 4, 11, 11585, 11585, [pd_8192], 0, 7
+%endif
 
     ; m0=t16, m1=t17, m2=t18, m3=t19, m4=t20, m5=t21, m6=t22, m7=t23,
     ; m8=t24, m9=t25, m10=t26, m11=t27, m12=t28, m13=t29, m14=t30, m15=t31
@@ -1989,18 +2006,20 @@ IADST16_FN iadst, IADST16, iadst, IADST16, avx
     ; t24-31 is in m8-15
     pxor                m7, m7
 
+%if cpuflag(ssse3)
+%define ROUND_REG [pw_512]
+%else
+%define ROUND_REG [pw_32]
+%endif
+
 %macro %%STORE_2X2 7-8 1 ; src[1-4], tmp[1-2], zero, inc_dst_ptrs
     SUMSUB_BA            w, %4, %1, %5
     SUMSUB_BA            w, %3, %2, %5
-    pmulhrsw           m%4, [pw_512]
-    pmulhrsw           m%3, [pw_512]
-    VP9_STORE_2X        %4, %3, %5, %6, %7
+    VP9_IDCT8_WRITEx2   %4, %3, %5, %6, %7, ROUND_REG, 6
 %if %8 == 1
     add               dstq, stride2q
 %endif
-    pmulhrsw           m%2, [pw_512]
-    pmulhrsw           m%1, [pw_512]
-    VP9_STORE_2X        %2, %1, %5, %6, %7, dst_endq
+    VP9_IDCT8_WRITEx2   %2, %1, %5, %6, %7, ROUND_REG, 6, dst_endq
 %if %8 == 1
     sub           dst_endq, stride2q
 %endif
@@ -2050,26 +2069,47 @@ IADST16_FN iadst, IADST16, iadst, IADST16, avx
     mova                m5, [tmpq+ 5*%%str]
     mova                m4, [tmpq+ 1*%%str]
     %%STORE_2X2          0,  1,  4,  5, 2, 3, 7, 0
+
+%undef ROUND_REG
 %endif
 %endmacro
 
 %macro VP9_IDCT_IDCT_32x32_ADD_XMM 1
 INIT_XMM %1
 cglobal vp9_idct_idct_32x32_add, 4, 9, 16, 2048, dst, stride, block, eob
+%if cpuflag(ssse3)
     cmp eobd, 135
     jg .idctfull
     cmp eobd, 34
     jg .idct16x16
     cmp eobd, 1
     jg .idct8x8
+%else
+    cmp eobd, 1
+    jg .idctfull
+%endif
 
     ; dc-only case
+%if cpuflag(ssse3)
     movd                m0, [blockq]
     mova                m1, [pw_11585x2]
     pmulhrsw            m0, m1
     pmulhrsw            m0, m1
+%else
+    DEFINE_ARGS dst, stride, block, coef
+    movsx            coefd, word [blockq]
+    imul             coefd, 11585
+    add              coefd, 8192
+    sar              coefd, 14
+    imul             coefd, 11585
+    add              coefd, (32 << 14) + 8192
+    sar              coefd, 14 + 6
+    movd                m0, coefd
+%endif
     SPLATW              m0, m0, q0000
+%if cpuflag(ssse3)
     pmulhrsw            m0, [pw_512]
+%endif
     pxor                m5, m5
     movd          [blockq], m5
     DEFINE_ARGS        dst, stride, block, cnt
@@ -2081,6 +2121,7 @@ cglobal vp9_idct_idct_32x32_add, 4, 9, 16, 2048, dst, stride, block, eob
     RET
 
     DEFINE_ARGS dst_bak, stride, block, cnt, dst, stride30, dst_end, stride2, tmp
+%if cpuflag(ssse3)
 .idct8x8:
     mov               tmpq, rsp
     VP9_IDCT32_1D   blockq, 1, 8
@@ -2134,6 +2175,7 @@ cglobal vp9_idct_idct_32x32_add, 4, 9, 16, 2048, dst, stride, block, eob
     ; use that to zero out block coefficients
     ZERO_BLOCK      blockq, 64, 16, m7
     RET
+%endif
 
 .idctfull:
     mov               cntd, 4
@@ -2167,6 +2209,7 @@ cglobal vp9_idct_idct_32x32_add, 4, 9, 16, 2048, dst, stride, block, eob
     RET
 %endmacro
 
+VP9_IDCT_IDCT_32x32_ADD_XMM sse2
 VP9_IDCT_IDCT_32x32_ADD_XMM ssse3
 VP9_IDCT_IDCT_32x32_ADD_XMM avx
 
