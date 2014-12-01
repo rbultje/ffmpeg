@@ -1070,8 +1070,6 @@ IADST8_FN iadst, IADST8, iadst, IADST8, ssse3
 IADST8_FN iadst, IADST8, iadst, IADST8, avx
 %undef PSIGNW
 
-%if ARCH_X86_64 ; TODO: 32-bit? (32-bit limited to 8 xmm reg, we use more)
-
 ;---------------------------------------------------------------------------------------------
 ; void vp9_idct_idct_16x16_add_<opt>(uint8_t *dst, ptrdiff_t stride, int16_t *block, int eob);
 ;---------------------------------------------------------------------------------------------
@@ -1105,154 +1103,289 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
     VP9_UNPACK_MULSUB_2W_4X 2, 5, 4, 3, 15137,  6270, [pd_8192], 10, 11 ; t9,  t14
     VP9_UNPACK_MULSUB_2W_4X 6, 1, 0, 7, 6270, m15137, [pd_8192], 10, 11 ; t10, t13
 
+%if ARCH_X86_64
+    SWAP 4, 10
+%else
+    ..
+%endif
+
     ; m15=t0, m14=t1, m13=t2, m12=t3, m11=t4, m10=t5, m9=t6, m8=t7
     ; m7=t8, m6=t9, m2=t10, m3=t11, m4=t12, m5=t13, m1=t14, m0=t15
 %else
-    mova                m5, [%1+ 1*%3]     ; IN(1)
-    mova               m14, [%1+ 2*%3]     ; IN(2)
-    mova                m6, [%1+ 3*%3]     ; IN(3)
-    mova                m9, [%1+ 4*%3]     ; IN(4)
-    mova                m7, [%1+ 5*%3]     ; IN(5)
-    mova               m15, [%1+ 6*%3]     ; IN(6)
-    mova                m4, [%1+ 7*%3]     ; IN(7)
+    mova                m6, [%1+ 2*%3]      ; IN(2)
+    mova                m1, [%1+ 4*%3]      ; IN(4)
+    mova                m7, [%1+ 6*%3]      ; IN(6)
 %if %2 <= 8
-    pmulhrsw            m8, m9,  [pw_15137x2]       ; t3
-    pmulhrsw            m9, [pw_6270x2]             ; t2
-    pmulhrsw           m13, m14, [pw_16069x2]       ; t7
-    pmulhrsw           m14, [pw_3196x2]             ; t4
-    pmulhrsw           m12, m15, [pw_m9102x2]       ; t5
-    pmulhrsw           m15, [pw_13623x2]            ; t6
+    pmulhrsw            m0, m1,  [pw_15137x2]       ; t3
+    pmulhrsw            m1, [pw_6270x2]             ; t2
+    pmulhrsw            m5, m6, [pw_16069x2]        ; t7
+    pmulhrsw            m6, [pw_3196x2]             ; t4
+    pmulhrsw            m4, m7, [pw_m9102x2]        ; t5
+    pmulhrsw            m7, [pw_13623x2]            ; t6
+%else
+    mova                m4, [%1+10*%3]      ; IN(10)
+    mova                m0, [%1+12*%3]      ; IN(12)
+    mova                m5, [%1+14*%3]      ; IN(14)
+
+    VP9_UNPACK_MULSUB_2W_4X   1,   0, 15137,  6270, [pd_8192], 2, 3 ; t2,  t3
+    VP9_UNPACK_MULSUB_2W_4X   6,   5, 16069,  3196, [pd_8192], 2, 3 ; t4,  t7
+    VP9_UNPACK_MULSUB_2W_4X   4,   7,  9102, 13623, [pd_8192], 2, 3 ; t5,  t6
+%endif
+
+    SUMSUB_BA            w,  4,  6, 2       ; t4,  t5
+    SUMSUB_BA            w,  7,  5, 2       ; t7,  t6
+
+%if cpuflag(ssse3)
+    SUMSUB_BA            w,  6,  5, 2
+    pmulhrsw            m5, [pw_11585x2]                              ; t5
+    pmulhrsw            m6, [pw_11585x2]                              ; t6
+%else
+    VP9_UNPACK_MULSUB_2W_4X  5,  6, 11585, 11585, [pd_8192], 2, 3 ; t5,  t6
+%endif
+
+%if ARCH_X86_64
+    SWAP 0, 8
+    SWAP 1, 9
+    SWAP 4, 12
+    SWAP 5, 13
+    SWAP 6, 14
+    SWAP 7, 15
+%else
+    ..
+%endif
+
+    mova                m5, [%1+ 1*%3]      ; IN(1)
+    mova                m4, [%1+ 7*%3]      ; IN(7)
+%if %2 <= 8
     pmulhrsw            m2, m5,  [pw_16305x2]       ; t15
     pmulhrsw            m5, [pw_1606x2]             ; t8
     pmulhrsw            m3, m4,  [pw_m10394x2]      ; t9
     pmulhrsw            m4, [pw_12665x2]            ; t14
+%else
+    mova                m3, [%1+ 9*%3]      ; IN(9)
+    mova                m2, [%1+15*%3]      ; IN(15)
+
+    ; m10=in0, m5=in1, m14=in2, m6=in3, m9=in4, m7=in5, m15=in6, m4=in7
+    ; m11=in8, m3=in9, m12=in10 m0=in11, m8=in12, m1=in13, m13=in14, m2=in15
+
+    VP9_UNPACK_MULSUB_2W_4X   5,   2, 16305,  1606, [pd_8192], 0, 1 ; t8,  t15
+    VP9_UNPACK_MULSUB_2W_4X   3,   4, 10394, 12665, [pd_8192], 0, 1 ; t9,  t14
+%endif
+
+    SUMSUB_BA            w,  3,  5, 0       ; t8,  t9
+    SUMSUB_BA            w,  4,  2, 0       ; t15, t14
+
+    VP9_UNPACK_MULSUB_2W_4X   2,   5, 15137,  6270, [pd_8192], 0, 1 ; t9,  t14
+
+%if ARCH_X86_64
+    SWAP 4, 10
+    SWAP 5, 11
+%else
+    ..
+%endif
+
+    mova                m6, [%1+ 3*%3]      ; IN(3)
+    mova                m7, [%1+ 5*%3]      ; IN(5)
+%if %2 <= 8
     pmulhrsw            m0, m7,  [pw_14449x2]       ; t13
     pmulhrsw            m7, [pw_7723x2]             ; t10
     pmulhrsw            m1, m6,  [pw_m4756x2]       ; t11
     pmulhrsw            m6, [pw_15679x2]            ; t12
 %else
-    mova                m3, [%1+ 9*%3]     ; IN(9)
-    mova               m12, [%1+10*%3]     ; IN(10)
-    mova                m0, [%1+11*%3]     ; IN(11)
-    mova                m8, [%1+12*%3]     ; IN(12)
-    mova                m1, [%1+13*%3]     ; IN(13)
-    mova               m13, [%1+14*%3]     ; IN(14)
-    mova                m2, [%1+15*%3]     ; IN(15)
+    mova                m0, [%1+11*%3]      ; IN(11)
+    mova                m1, [%1+13*%3]      ; IN(13)
 
-    ; m10=in0, m5=in1, m14=in2, m6=in3, m9=in4, m7=in5, m15=in6, m4=in7
-    ; m11=in8, m3=in9, m12=in10 m0=in11, m8=in12, m1=in13, m13=in14, m2=in15
-
-    VP9_UNPACK_MULSUB_2W_4X   9,   8, 15137,  6270, [pd_8192], 10, 11 ; t2,  t3
-    VP9_UNPACK_MULSUB_2W_4X  14,  13, 16069,  3196, [pd_8192], 10, 11 ; t4,  t7
-    VP9_UNPACK_MULSUB_2W_4X  12,  15,  9102, 13623, [pd_8192], 10, 11 ; t5,  t6
-    VP9_UNPACK_MULSUB_2W_4X   5,   2, 16305,  1606, [pd_8192], 10, 11 ; t8,  t15
-    VP9_UNPACK_MULSUB_2W_4X   3,   4, 10394, 12665, [pd_8192], 10, 11 ; t9,  t14
-    VP9_UNPACK_MULSUB_2W_4X   7,   0, 14449,  7723, [pd_8192], 10, 11 ; t10, t13
-    VP9_UNPACK_MULSUB_2W_4X   1,   6,  4756, 15679, [pd_8192], 10, 11 ; t11, t12
+    VP9_UNPACK_MULSUB_2W_4X   7,   0, 14449,  7723, [pd_8192], 4, 5 ; t10, t13
+    VP9_UNPACK_MULSUB_2W_4X   1,   6,  4756, 15679, [pd_8192], 4, 5 ; t11, t12
 %endif
 
     ; m11=t0, m10=t1, m9=t2, m8=t3, m14=t4, m12=t5, m15=t6, m13=t7
     ; m5=t8, m3=t9, m7=t10, m1=t11, m6=t12, m0=t13, m4=t14, m2=t15
 
-    SUMSUB_BA            w, 12, 14, 10      ; t4,  t5
-    SUMSUB_BA            w, 15, 13, 10      ; t7,  t6
-    SUMSUB_BA            w,  3,  5, 10      ; t8,  t9
-    SUMSUB_BA            w,  7,  1, 10      ; t11, t10
-    SUMSUB_BA            w,  0,  6, 10      ; t12, t13
-    SUMSUB_BA            w,  4,  2, 10      ; t15, t14
+    SUMSUB_BA            w,  7,  1, 4       ; t11, t10
+    SUMSUB_BA            w,  0,  6, 4       ; t12, t13
 
     ; m8=t0, m9=t1, m10=t2, m11=t3, m12=t4, m14=t5, m13=t6, m15=t7
     ; m3=t8, m5=t9, m1=t10, m7=t11, m0=t12, m6=t13, m2=t14, m4=t15
 
-%if cpuflag(ssse3)
-    SUMSUB_BA            w, 14, 13, 10
-    pmulhrsw           m13, [pw_11585x2]                              ; t5
-    pmulhrsw           m14, [pw_11585x2]                              ; t6
+    VP9_UNPACK_MULSUB_2W_4X   6,   1, 6270, m15137, [pd_8192], 4, 5 ; t10, t13
+
+%if ARCH_X86_64
+    SWAP 5, 11
 %else
-    VP9_UNPACK_MULSUB_2W_4X  13,  14, 11585, 11585, [pd_8192], 10, 11 ; t5,  t6
+    ..
 %endif
-    VP9_UNPACK_MULSUB_2W_4X   2,   5, 15137,  6270, [pd_8192], 10, 11 ; t9,  t14
-    VP9_UNPACK_MULSUB_2W_4X   6,   1, 6270, m15137, [pd_8192], 10, 11 ; t10, t13
 %endif
 
     ; m8=t0, m9=t1, m10=t2, m11=t3, m12=t4, m13=t5, m14=t6, m15=t7
     ; m3=t8, m2=t9, m6=t10, m7=t11, m0=t12, m1=t13, m5=t14, m4=t15
 
-    SUMSUB_BA            w,  7,  3, 10      ; t8,  t11
-    SUMSUB_BA            w,  6,  2, 10      ; t9,  t10
-    SUMSUB_BA            w,  0,  4, 10      ; t15, t12
-    SUMSUB_BA            w,  1,  5, 10      ; t14. t13
+    SUMSUB_BA            w,  7,  3, 4       ; t8,  t11
+
+    ; backup first register
+    mova              [%4], m7
+
+    SUMSUB_BA            w,  6,  2, 7       ; t9,  t10
+
+%if ARCH_X86_64
+    SWAP 4, 10
+%else
+    ..
+%endif
+
+    SUMSUB_BA            w,  0,  4, 7       ; t15, t12
+    SUMSUB_BA            w,  1,  5, 7       ; t14. t13
 
     ; m15=t0, m14=t1, m13=t2, m12=t3, m11=t4, m10=t5, m9=t6, m8=t7
     ; m7=t8, m6=t9, m2=t10, m3=t11, m4=t12, m5=t13, m1=t14, m0=t15
 
 %if cpuflag(ssse3)
-    SUMSUB_BA            w,  2,  5, 10
-    SUMSUB_BA            w,  3,  4, 10
+    SUMSUB_BA            w,  2,  5, 7
+    SUMSUB_BA            w,  3,  4, 7
     pmulhrsw            m5, [pw_11585x2]    ; t10
     pmulhrsw            m4, [pw_11585x2]    ; t11
     pmulhrsw            m3, [pw_11585x2]    ; t12
     pmulhrsw            m2, [pw_11585x2]    ; t13
 %else
-    VP9_UNPACK_MULSUB_2W_4X   5,   2, 11585, 11585, [pd_8192], 10, 11 ; t10, t13
-    VP9_UNPACK_MULSUB_2W_4X   4,   3, 11585, 11585, [pd_8192], 10, 11 ; t11, t12
+%if ARCH_X86_64
+    SWAP 6, 10
+%else
+    ..
 %endif
 
-    ; backup first register
-    mova              [%4], m7
+    VP9_UNPACK_MULSUB_2W_4X   5,   2, 11585, 11585, [pd_8192], 6, 7 ; t10, t13
+    VP9_UNPACK_MULSUB_2W_4X   4,   3, 11585, 11585, [pd_8192], 6, 7 ; t11, t12
+
+%if ARCH_X86_64
+    SWAP 6, 10
+%else
+    ..
+%endif
+%endif
 
     ; m15=t0, m14=t1, m13=t2, m12=t3, m11=t4, m10=t5, m9=t6, m8=t7
     ; m7=t8, m6=t9, m5=t10, m4=t11, m3=t12, m2=t13, m1=t14, m0=t15
 
+%if ARCH_X86_64
+    SWAP 0, 8
+    SWAP 1, 9
+    SWAP 2, 10
+    SWAP 3, 11
+    SWAP 4, 12
+    SWAP 5, 13
+    SWAP 6, 14
+    SWAP 7, 15
+%else
+    ..
+%endif
+
     ; from load/start
 %if %2 <= 4
-    mova               m11, [%1+ 0*%3]      ; IN(0)
-    pmulhrsw           m11, [pw_11585x2]    ; t0-t3
+    mova                m3, [%1+ 0*%3]      ; IN(0)
+    pmulhrsw            m3, [pw_11585x2]    ; t0-t3
 
-    psubw               m8, m11, m15
-    paddw              m15, m11
-    psubw               m9, m11, m14
-    paddw              m14, m11
-    psubw              m10, m11, m13
-    paddw              m13, m11
+    psubw               m0, m3, m7
+    paddw               m7, m3
+    psubw               m1, m3, m6
+    paddw               m6, m3
+    psubw               m2, m3, m5
+    paddw               m5, m3
+
+%if ARCH_X86_64
+    SWAP 7, 15
 %else
-    mova               m10, [%1+ 0*%3]      ; IN(0)
+    ..
+%endif
+%else
+%if ARCH_X86_64
+    SWAP 5, 15
+%else
+    ..
+%endif
+
+    mova                m2, [%1+ 0*%3]      ; IN(0)
 %if %2 <= 8
-    pmulhrsw           m10, [pw_11585x2]    ; t0 and t1
-    psubw              m11, m10, m8
-    paddw               m8, m10
+    pmulhrsw            m2, [pw_11585x2]    ; t0 and t1
+    psubw               m3, m2, m0
+    paddw               m0, m2
+
+    SUMSUB_BA            w,  7,  0, 5       ; t0,  t7
 %else
-    mova               m11, [%1+ 8*%3]      ; IN(8)
+    mova                m3, [%1+ 8*%3]      ; IN(8)
 
     ; from 3 stages back
 %if cpuflag(ssse3)
-    SUMSUB_BA            w, 11, 10, 7
-    pmulhrsw           m11, [pw_11585x2]    ; t0
-    pmulhrsw           m10, [pw_11585x2]    ; t1
+    SUMSUB_BA            w,  3,  2, 5
+    pmulhrsw            m3, [pw_11585x2]    ; t0
+    pmulhrsw            m2, [pw_11585x2]    ; t1
 %else
-    mova        [%1+ 0*%3], m8
-    VP9_UNPACK_MULSUB_2W_4X 10,  11, 11585,  11585, [pd_8192], 7, 8 ; t0, t1
-    mova                m8, [%1+ 0*%3]
+    mova        [%1+ 0*%3], m0
+    VP9_UNPACK_MULSUB_2W_4X  2,  3, 11585,  11585, [pd_8192], 5, 0 ; t0, t1
+    mova                m0, [%1+ 0*%3]
 %endif
 
     ; from 2 stages back
-    SUMSUB_BA            w,  8, 11, 7       ; t0,  t3
+    SUMSUB_BA            w,  0,  3, 5      ; t0,  t3
+
+    SUMSUB_BA            w,  7,  0, 5      ; t0,  t7
 %endif
-    SUMSUB_BA            w,  9, 10, 7       ; t1,  t2
+%if ARCH_X86_64
+    SWAP 5, 15
+    SWAP 7, 15
+%else
+    ..
+%endif
+
+    SUMSUB_BA            w,  1,  2, 7       ; t1,  t2
 
     ; from 1 stage back
-    SUMSUB_BA            w, 15,  8, 7       ; t0,  t7
-    SUMSUB_BA            w, 14,  9, 7       ; t1,  t6
-    SUMSUB_BA            w, 13, 10, 7       ; t2,  t5
+    SUMSUB_BA            w,  6,  1, 7       ; t1,  t6
+    SUMSUB_BA            w,  5,  2, 7       ; t2,  t5
 %endif
-    SUMSUB_BA            w, 12, 11, 7       ; t3,  t4
+    SUMSUB_BA            w,  4,  3, 7       ; t3,  t4
 
-    SUMSUB_BA            w,  0, 15, 7       ; t0, t15
-    SUMSUB_BA            w,  1, 14, 7       ; t1, t14
-    SUMSUB_BA            w,  2, 13, 7       ; t2, t13
-    SUMSUB_BA            w,  3, 12, 7       ; t3, t12
-    SUMSUB_BA            w,  4, 11, 7       ; t4, t11
-    SUMSUB_BA            w,  5, 10, 7       ; t5, t10
+%if ARCH_X86_64
+    SWAP 0, 8
+    SWAP 1, 9
+    SWAP 2, 10
+    SWAP 3, 11
+    SWAP 4, 12
+    SWAP 5, 13
+    SWAP 6, 14
+
+    SWAP 6, 15
+    SWAP 5, 14
+    SWAP 4, 13
+%else
+    ..
+%endif
+
+    SUMSUB_BA            w,  0,  6, 7       ; t0, t15
+    SUMSUB_BA            w,  1,  5, 7       ; t1, t14
+    SUMSUB_BA            w,  2,  4, 7       ; t2, t13
+
+%if ARCH_X86_64
+    SWAP 6, 15
+    SWAP 5, 14
+    SWAP 4, 13
+    SWAP 0, 10
+    SWAP 1, 11
+    SWAP 2, 12
+%else
+    ..
+%endif
+
+    SUMSUB_BA            w,  3,  2, 7       ; t3, t12
+    SUMSUB_BA            w,  4,  1, 7       ; t4, t11
+    SUMSUB_BA            w,  5,  0, 7       ; t5, t10
+
+%if ARCH_X86_64
+    SWAP 0, 10
+    SWAP 1, 11
+    SWAP 2, 12
+%else
+    ..
+%endif
 %endmacro
 
 %macro VP9_IDCT16_1D 2-3 16 ; src, pass, nnzc
@@ -1260,11 +1393,28 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
 
 %if %2 == 1
     ; backup a different register
-    mova         [tmpq+16], m15
     mova                m7, [tmpq+32]
 
-    SUMSUB_BA            w,  6,  9, 15      ; t6, t9
-    SUMSUB_BA            w,  7,  8, 15      ; t7, t8
+%if ARCH_X86_64
+    SWAP 2, 15
+    SWAP 0, 8
+    SWAP 1, 9
+%else
+    ..
+%endif
+
+    mova         [tmpq+16], m2
+
+    SUMSUB_BA            w,  6,  1, 2       ; t6, t9
+    SUMSUB_BA            w,  7,  0, 2       ; t7, t8
+
+%if ARCH_X86_64
+    SWAP 2, 15
+    SWAP 0, 8
+    SWAP 1, 9
+%else
+    ..
+%endif
 
     TRANSPOSE8x8W        0, 1, 2, 3, 4, 5, 6, 7, 15
     mova        [tmpq+  0], m0
@@ -1276,20 +1426,40 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
     mova        [tmpq+192], m6
     mova        [tmpq+224], m7
 
-    mova               m15, [tmpq+16]
-    TRANSPOSE8x8W        8, 9, 10, 11, 12, 13, 14, 15, 0
-    mova        [tmpq+ 16], m8
-    mova        [tmpq+ 48], m9
-    mova        [tmpq+ 80], m10
-    mova        [tmpq+112], m11
-    mova        [tmpq+144], m12
-    mova        [tmpq+176], m13
-    mova        [tmpq+208], m14
-    mova        [tmpq+240], m15
+%if ARCH_X86_64
+    SWAP 0, 8
+    SWAP 1, 9
+    SWAP 2, 10
+    SWAP 3, 11
+    SWAP 4, 12
+    SWAP 5, 13
+    SWAP 6, 14
+    SWAP 7, 15
+%else
+    ..
+%endif
+
+    mova                m7, [tmpq+16]
+    TRANSPOSE8x8W        0, 1, 2, 3, 4, 5, 6, 7, 8
+    mova        [tmpq+ 16], m0
+    mova        [tmpq+ 48], m1
+    mova        [tmpq+ 80], m2
+    mova        [tmpq+112], m3
+    mova        [tmpq+144], m4
+    mova        [tmpq+176], m5
+    mova        [tmpq+208], m6
+    mova        [tmpq+240], m7
 %else ; %2 == 2
+%if ARCH_X86_64
+    SWAP 4, 8
+    SWAP 5, 9
+%else
+    ..
+%endif
+
     ; backup more registers
-    mova         [tmpq+64], m8
-    mova         [tmpq+96], m9
+    mova         [tmpq+64], m4
+    mova         [tmpq+96], m5
 
 %if cpuflag(ssse3)
 %define ROUND_REG [pw_512]
@@ -1298,31 +1468,65 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
 %endif
 
     pxor                m7, m7
-    VP9_IDCT8_WRITEx2    0,  1, 8, 9, 7, ROUND_REG, 6
+    VP9_IDCT8_WRITEx2    0,  1, 4, 5, 7, ROUND_REG, 6
     lea               dstq, [dstq+strideq*2]
-    VP9_IDCT8_WRITEx2    2,  3, 8, 9, 7, ROUND_REG, 6
+    VP9_IDCT8_WRITEx2    2,  3, 4, 5, 7, ROUND_REG, 6
     lea               dstq, [dstq+strideq*2]
-    VP9_IDCT8_WRITEx2    4,  5, 8, 9, 7, ROUND_REG, 6
+
+%if ARCH_X86_64
+    SWAP 4, 8
+    SWAP 5, 9
+%else
+    ..
+%endif
+
+    VP9_IDCT8_WRITEx2    4,  5, 0, 1, 7, ROUND_REG, 6
     lea               dstq, [dstq+strideq*2]
 
     ; restore from cache
     SWAP                 0, 7               ; move zero from m7 to m0
     mova                m7, [tmpq+32]
-    mova                m8, [tmpq+64]
-    mova                m9, [tmpq+96]
 
-    SUMSUB_BA            w,  6,  9, 1       ; t6, t9
-    SUMSUB_BA            w,  7,  8, 1       ; t7, t8
+%if ARCH_X86_64
+    SWAP 1, 8
+    SWAP 2, 9
+%else
+    ..
+%endif
 
+    mova                m1, [tmpq+64]
+    mova                m2, [tmpq+96]
+
+    SUMSUB_BA            w,  6,  2, 3       ; t6, t9
+    SUMSUB_BA            w,  7,  1, 3       ; t7, t8
+
+    VP9_IDCT8_WRITEx2    6,  7, 3, 4, 0, ROUND_REG, 6
+    lea               dstq, [dstq+strideq*2]
+    VP9_IDCT8_WRITEx2    1,  2, 3, 4, 0, ROUND_REG, 6
+    lea               dstq, [dstq+strideq*2]
+
+%if ARCH_X86_64
+    SWAP 4, 10
+    SWAP 5, 11
+    SWAP 6, 12
+    SWAP 7, 13
+%else
+    ..
+%endif
+
+    VP9_IDCT8_WRITEx2    4,  5, 1, 2, 0, ROUND_REG, 6
+    lea               dstq, [dstq+strideq*2]
     VP9_IDCT8_WRITEx2    6,  7, 1, 2, 0, ROUND_REG, 6
     lea               dstq, [dstq+strideq*2]
-    VP9_IDCT8_WRITEx2    8,  9, 1, 2, 0, ROUND_REG, 6
-    lea               dstq, [dstq+strideq*2]
-    VP9_IDCT8_WRITEx2   10, 11, 1, 2, 0, ROUND_REG, 6
-    lea               dstq, [dstq+strideq*2]
-    VP9_IDCT8_WRITEx2   12, 13, 1, 2, 0, ROUND_REG, 6
-    lea               dstq, [dstq+strideq*2]
-    VP9_IDCT8_WRITEx2   14, 15, 1, 2, 0, ROUND_REG, 6
+
+%if ARCH_X86_64
+    SWAP 14, 3
+    SWAP 15, 4
+%else
+    ..
+%endif
+
+    VP9_IDCT8_WRITEx2    3,  4, 1, 2, 0, ROUND_REG, 6
 
 %undef ROUND_REG
 %endif ; %2 == 1/2
@@ -1348,7 +1552,7 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
 %macro VP9_IDCT_IDCT_16x16_ADD_XMM 1
 INIT_XMM %1
 cglobal vp9_idct_idct_16x16_add, 4, 6, 16, 512, dst, stride, block, eob
-%if cpuflag(ssse3)
+%if cpuflag(ssse3) && ARCH_X86_64
     ; 2x2=eob=3, 4x4=eob=10
     cmp eobd, 38
     jg .idctfull
@@ -1390,7 +1594,7 @@ cglobal vp9_idct_idct_16x16_add, 4, 6, 16, 512, dst, stride, block, eob
     RET
 
     DEFINE_ARGS dst, stride, block, cnt, dst_bak, tmp
-%if cpuflag(ssse3)
+%if cpuflag(ssse3) && ARCH_X86_64
 .idct8x8:
     mov               tmpq, rsp
     VP9_IDCT16_1D   blockq, 1, 8
@@ -1440,6 +1644,8 @@ cglobal vp9_idct_idct_16x16_add, 4, 6, 16, 512, dst, stride, block, eob
 VP9_IDCT_IDCT_16x16_ADD_XMM sse2
 VP9_IDCT_IDCT_16x16_ADD_XMM ssse3
 VP9_IDCT_IDCT_16x16_ADD_XMM avx
+
+%if ARCH_X86_64 ; TODO: 32-bit? (32-bit limited to 8 xmm reg, we use more)
 
 ;---------------------------------------------------------------------------------------------
 ; void vp9_iadst_iadst_16x16_add_<opt>(uint8_t *dst, ptrdiff_t stride, int16_t *block, int eob);
