@@ -600,37 +600,24 @@ IADST4_FN iadst, IADST4, iadst, IADST4, ssse3
     mova                m9, [pw_16]
 %endif
 %define ROUND_REG m9
-    SWAP                 5, 10
-    SWAP                 7, 11
 %else
 %if cpuflag(ssse3)
 %define ROUND_REG [pw_1024]
 %else
 %define ROUND_REG [pw_16]
 %endif
-    mova       [blockq+16], m5
-    mova       [blockq+32], m7
 %endif
+    SCRATCH              5, 10, blockq+16
+    SCRATCH              7, 11, blockq+32
     VP9_IDCT8_WRITEx2    0,  1, 5, 7, 6, ROUND_REG
     lea               dstq, [dstq+2*strideq]
     VP9_IDCT8_WRITEx2    2,  3, 5, 7, 6, ROUND_REG
     lea               dstq, [dstq+2*strideq]
-
-%if ARCH_X86_64
-    SWAP                 5, 10
-    SWAP                 7, 11
-%else
-    mova                m5, [blockq+16]
-    mova                m7, [blockq+32]
-%endif
-
+    UNSCRATCH            5, 10, blockq+16
+    UNSCRATCH            7, 11, blockq+32
     VP9_IDCT8_WRITEx2    4,  5, 0, 1, 6, ROUND_REG
     lea               dstq, [dstq+2*strideq]
-%if ARCH_X86_64
-    SWAP                 5, 8
-%else
-    mova                m5, [blockq+ 0]
-%endif
+    UNSCRATCH            5, 8, blockq+ 0
     VP9_IDCT8_WRITEx2    5,  7, 0, 1, 6, ROUND_REG
 
 %undef ROUND_REG
@@ -1062,13 +1049,8 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
 
     VP9_UNPACK_MULSUB_2W_4X   2,   5, 15137,  6270, [pd_8192], 0, 1 ; t9,  t14
 
-%if ARCH_X86_64
-    SWAP                 4, 10
-    SWAP                 5, 11
-%else
-    mova        [%1+ 1*%3], m4
-    mova        [%1+ 7*%3], m5
-%endif
+    SCRATCH              4, 10, %1+ 1*%3
+    SCRATCH              5, 11, %1+ 7*%3
 
     mova                m6, [%1+ 3*%3]      ; IN(3)
     mova                m7, [%1+ 5*%3]      ; IN(5)
@@ -1096,11 +1078,7 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
 
     VP9_UNPACK_MULSUB_2W_4X   6,   1, 6270, m15137, [pd_8192], 4, 5 ; t10, t13
 
-%if ARCH_X86_64
-    SWAP                 5, 11
-%else
-    mova                m5, [%1+ 7*%3]
-%endif
+    UNSCRATCH            5, 11, %1+ 7*%3
 %endif
 
     ; m8=t0, m9=t1, m10=t2, m11=t3, m12=t4, m13=t5, m14=t6, m15=t7
@@ -1112,13 +1090,7 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
     mova        [%4+15*%5], m7
 
     SUMSUB_BA            w,  6,  2, 7       ; t9,  t10
-
-%if ARCH_X86_64
-    SWAP                 4, 10
-%else
-    mova                m4, [%1+ 1*%3]
-%endif
-
+    UNSCRATCH            4, 10, %1+ 1*%3
     SUMSUB_BA            w,  0,  4, 7       ; t15, t12
     SUMSUB_BA            w,  1,  5, 7       ; t14. t13
 
@@ -1133,42 +1105,22 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
     pmulhrsw            m3, [pw_11585x2]    ; t12
     pmulhrsw            m2, [pw_11585x2]    ; t13
 %else
-%if ARCH_X86_64
-    SWAP                 6, 10
-%else
-    mova        [%1+ 1*%3], m6
-%endif
-
+    SCRATCH              6, 10, %1+ 1*%3
     VP9_UNPACK_MULSUB_2W_4X   5,   2, 11585, 11585, [pd_8192], 6, 7 ; t10, t13
     VP9_UNPACK_MULSUB_2W_4X   4,   3, 11585, 11585, [pd_8192], 6, 7 ; t11, t12
-
-%if ARCH_X86_64
-    SWAP                 6, 10
-%else
-    mova                m6, [%1+ 1*%3]
-%endif
+    UNSCRATCH            6, 10, %1+ 1*%3
 %endif
 
     ; m15=t0, m14=t1, m13=t2, m12=t3, m11=t4, m10=t5, m9=t6, m8=t7
     ; m7=t8, m6=t9, m5=t10, m4=t11, m3=t12, m2=t13, m1=t14, m0=t15
 
-%if ARCH_X86_64
-    SWAP                 0, 8
-    SWAP                 1, 9
-    SWAP                 2, 10
-    SWAP                 3, 11
-    SWAP                 4, 12
-    SWAP                 5, 13
-    SWAP                 6, 14
-%else
-    mova        [%4+ 1*%5], m0
-    mova        [%4+ 3*%5], m1
-    mova        [%4+ 5*%5], m2
-    mova        [%4+ 7*%5], m3
-    mova        [%4+ 9*%5], m4
-    mova        [%4+11*%5], m5
-    mova        [%4+13*%5], m6
-%endif
+    SCRATCH              0,  8, %4+ 1*%5
+    SCRATCH              1,  9, %4+ 3*%5
+    SCRATCH              2, 10, %4+ 5*%5
+    SCRATCH              3, 11, %4+ 7*%5
+    SCRATCH              4, 12, %4+ 9*%5
+    SCRATCH              5, 13, %4+11*%5
+    SCRATCH              6, 14, %4+13*%5
 
     ; even (tx8x8)
 %if %2 <= 4
@@ -1191,12 +1143,7 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
     psubw               m2, m3, m5
     paddw               m5, m3
 
-%if ARCH_X86_64
-    SWAP                 7, 15
-%else
-    ; FIXME is this correct?
-    mova        [%4+12*%5], m7
-%endif
+    SCRATCH              7, 15, %4+12*%5
 %else
     mova                m6, [%1+ 2*%3]      ; IN(2)
     mova                m1, [%1+ 4*%3]      ; IN(4)
@@ -1229,12 +1176,7 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
     VP9_UNPACK_MULSUB_2W_4X  5,  6, 11585, 11585, [pd_8192], 2, 3 ; t5,  t6
 %endif
 
-%if ARCH_X86_64
-    SWAP                 5, 15
-%else
-    mova        [%4+10*%5], m5
-%endif
-
+    SCRATCH              5, 15, %4+10*%5
     mova                m2, [%1+ 0*%3]      ; IN(0)
 %if %2 <= 8
     pmulhrsw            m2, [pw_11585x2]    ; t0 and t1
@@ -1261,15 +1203,11 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
 
     SUMSUB_BA            w,  7,  0, 5      ; t0,  t7
 %endif
-%if ARCH_X86_64
-    SWAP                 5, 15
-    SWAP                 7, 15
-%else
-    mova                m5, [%4+10*%5]
-    mova        [%4+12*%5], m0
+    UNSCRATCH            5, 15, %4+10*%5
+%if ARCH_X86_32
     SWAP                 0, 7
 %endif
-
+    SCRATCH              7, 15, %4+12*%5
     SUMSUB_BA            w,  1,  2, 7       ; t1,  t2
 
     ; from 1 stage back
