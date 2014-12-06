@@ -1582,8 +1582,6 @@ VP9_IDCT_IDCT_16x16_ADD_XMM sse2
 VP9_IDCT_IDCT_16x16_ADD_XMM ssse3
 VP9_IDCT_IDCT_16x16_ADD_XMM avx
 
-%if ARCH_X86_64 ; TODO: 32-bit? (32-bit limited to 8 xmm reg, we use more)
-
 ;---------------------------------------------------------------------------------------------
 ; void vp9_iadst_iadst_16x16_add_<opt>(uint8_t *dst, ptrdiff_t stride, int16_t *block, int eob);
 ;---------------------------------------------------------------------------------------------
@@ -1592,162 +1590,260 @@ VP9_IDCT_IDCT_16x16_ADD_XMM avx
 %assign %%str 16*%2
     mova                m0, [%1+ 0*32]  ; in0
     mova                m1, [%1+15*32]  ; in15
-    mova                m8, [%1+ 7*32]  ; in7
-    mova                m9, [%1+ 8*32]  ; in8
+    mova                m2, [%1+ 7*32]  ; in7
+    mova                m3, [%1+ 8*32]  ; in8
 
-    VP9_UNPACK_MULSUB_2D_4X  1,  0,  2,  3, 16364,   804    ; m1/2=t1[d], m0/3=t0[d]
-    VP9_UNPACK_MULSUB_2D_4X  8,  9, 11, 10, 11003, 12140    ; m8/11=t9[d], m9/10=t8[d]
-    VP9_RND_SH_SUMSUB_BA     9,  0, 10,  3,  4, [pd_8192]   ; m9=t0[w], m0=t8[w]
-    VP9_RND_SH_SUMSUB_BA     8,  1, 11,  2,  4, [pd_8192]   ; m8=t1[w], m1=t9[w]
+    VP9_UNPACK_MULSUB_2D_4X  1,  0,  4,  5, 16364,   804    ; m1/4=t1[d], m0/5=t0[d]
+    VP9_UNPACK_MULSUB_2D_4X  2,  3,  7,  6, 11003, 12140    ; m2/7=t9[d], m3/6=t8[d]
+    SCRATCH              4, 8, tmpq+ 0*%%str
+    VP9_RND_SH_SUMSUB_BA     3,  0,  6,  5,  4, [pd_8192]   ; m3=t0[w], m0=t8[w]
+    UNSCRATCH            4, 8, tmpq+ 0*%%str
+    VP9_RND_SH_SUMSUB_BA     2,  1,  7,  4,  5, [pd_8192]   ; m2=t1[w], m1=t9[w]
 
-    mova               m11, [%1+ 2*32]  ; in2
-    mova               m10, [%1+13*32]  ; in13
+    SCRATCH              0, 10, tmpq+ 0*%%str
+    SCRATCH              1, 11, tmpq+15*%%str
+    mova   [tmpq+ 7*%%str], m2
+    mova   [tmpq+ 8*%%str], m3
+
+    mova                m1, [%1+ 2*32]  ; in2
+    mova                m0, [%1+13*32]  ; in13
     mova                m3, [%1+ 5*32]  ; in5
     mova                m2, [%1+10*32]  ; in10
 
-    VP9_UNPACK_MULSUB_2D_4X 10, 11,  6,  7, 15893,  3981    ; m10/6=t3[d], m11/7=t2[d]
+    VP9_UNPACK_MULSUB_2D_4X  0,  1,  6,  7, 15893,  3981    ; m0/6=t3[d], m1/7=t2[d]
     VP9_UNPACK_MULSUB_2D_4X  3,  2,  4,  5,  8423, 14053    ; m3/4=t11[d], m2/5=t10[d]
-    VP9_RND_SH_SUMSUB_BA     2, 11,  5,  7, 12, [pd_8192]   ; m2=t2[w], m11=t10[w]
-    VP9_RND_SH_SUMSUB_BA     3, 10,  4,  6, 12, [pd_8192]   ; m3=t3[w], m10=t11[w]
+    SCRATCH              4, 12, tmpq+ 2*%%str
+    VP9_RND_SH_SUMSUB_BA     2,  1,  5,  7,  4, [pd_8192]   ; m2=t2[w], m1=t10[w]
+    UNSCRATCH            4, 12, tmpq+ 2*%%str
+    VP9_RND_SH_SUMSUB_BA     3,  0,  4,  6,  5, [pd_8192]   ; m3=t3[w], m0=t11[w]
 
-    mova   [tmpq+ 0*%%str], m9          ; make some scratch space (t0:m9->r0)
-    mova                m4, [%1+ 4*32]  ; in4
-    mova                m5, [%1+11*32]  ; in11
-    mova               m12, [%1+ 3*32]  ; in3
-    mova               m13, [%1+12*32]  ; in12
+    SCRATCH              0, 12, tmpq+ 2*%%str
+    SCRATCH              1, 13, tmpq+13*%%str
+    mova   [tmpq+ 5*%%str], m2
+    mova   [tmpq+10*%%str], m3
 
-    VP9_UNPACK_MULSUB_2D_4X  5,  4,  7,  6, 14811,  7005    ; m5/7=t5[d], m4/6=t4[d]
-    VP9_UNPACK_MULSUB_2D_4X 12, 13, 14, 15,  5520, 15426    ; m12/14=t13[d], m13/15=t12[d]
-    VP9_RND_SH_SUMSUB_BA    13,  4, 15,  6,  9, [pd_8192]   ; m13=t4[w], m4=t12[w]
-    VP9_RND_SH_SUMSUB_BA    12,  5, 14,  7,  9, [pd_8192]   ; m12=t5[w], m5=t13[w]
+    mova                m2, [%1+ 4*32]  ; in4
+    mova                m3, [%1+11*32]  ; in11
+    mova                m0, [%1+ 3*32]  ; in3
+    mova                m1, [%1+12*32]  ; in12
 
-    mova   [tmpq+ 2*%%str], m8          ; t1:m9->r2
-    mova   [tmpq+ 3*%%str], m2          ; t2:m2->r3
-    mova   [tmpq+ 4*%%str], m3          ; t3:m3->r4
-    mova   [tmpq+ 5*%%str], m13         ; t4:m13->r5
+    VP9_UNPACK_MULSUB_2D_4X  3,  2,  7,  6, 14811,  7005    ; m3/7=t5[d], m2/6=t4[d]
+    VP9_UNPACK_MULSUB_2D_4X  0,  1,  4,  5,  5520, 15426    ; m0/4=t13[d], m1/5=t12[d]
+    SCRATCH              4, 9, tmpq+ 4*%%str
+    VP9_RND_SH_SUMSUB_BA     1,  2,  5,  6,  4, [pd_8192]   ; m1=t4[w], m2=t12[w]
+    UNSCRATCH            4, 9, tmpq+ 4*%%str
+    VP9_RND_SH_SUMSUB_BA     0,  3,  4,  7,  6, [pd_8192]   ; m0=t5[w], m3=t13[w]
+
+    SCRATCH              0,  8, tmpq+ 4*%%str
+    mova   [tmpq+11*%%str], m1          ; t4:m1->r11
+    UNSCRATCH            0, 10, tmpq+ 0*%%str
+    UNSCRATCH            1, 11, tmpq+15*%%str
+
+    ; round 2 interleaved part 1
+    VP9_UNPACK_MULSUB_2D_4X  0,  1,  6,  7, 16069,  3196    ; m1/7=t8[d], m0/6=t9[d]
+    VP9_UNPACK_MULSUB_2D_4X  3,  2,  5,  4,  3196, 16069    ; m3/5=t12[d], m2/4=t13[d]
+    SCRATCH              4, 9, tmpq+ 3*%%str
+    VP9_RND_SH_SUMSUB_BA     3,  1,  5,  7,  4, [pd_8192]   ; m3=t8[w], m1=t12[w]
+    UNSCRATCH            4, 9, tmpq+ 3*%%str
+    VP9_RND_SH_SUMSUB_BA     2,  0,  4,  6,  5, [pd_8192]   ; m2=t9[w], m0=t13[w]
+
+    SCRATCH              0, 10, tmpq+ 0*%%str
+    SCRATCH              1, 11, tmpq+15*%%str
+    SCRATCH              2, 14, tmpq+ 3*%%str
+    SCRATCH              3, 15, tmpq+12*%%str
+
     mova                m2, [%1+ 6*32]  ; in6
     mova                m3, [%1+ 9*32]  ; in9
-    mova                m8, [%1+ 1*32]  ; in1
-    mova                m9, [%1+14*32]  ; in14
+    mova                m0, [%1+ 1*32]  ; in1
+    mova                m1, [%1+14*32]  ; in14
 
     VP9_UNPACK_MULSUB_2D_4X  3,  2,  7,  6, 13160,  9760    ; m3/7=t7[d], m2/6=t6[d]
-    VP9_UNPACK_MULSUB_2D_4X  8,  9, 13, 14,  2404, 16207    ; m8/13=t15[d], m9/14=t14[d]
-    VP9_RND_SH_SUMSUB_BA     9,  2, 14,  6, 15, [pd_8192]   ; m9=t6[w], m2=t14[w]
-    VP9_RND_SH_SUMSUB_BA     8,  3, 13,  7, 15, [pd_8192]   ; m8=t7[w], m3=t15[w]
+    VP9_UNPACK_MULSUB_2D_4X  0,  1,  4,  5,  2404, 16207    ; m0/4=t15[d], m1/5=t14[d]
+    SCRATCH              4, 9, tmpq+ 6*%%str
+    VP9_RND_SH_SUMSUB_BA     1,  2,  5,  6,  4, [pd_8192]   ; m1=t6[w], m2=t14[w]
+    UNSCRATCH            4, 9, tmpq+ 6*%%str
+    VP9_RND_SH_SUMSUB_BA     0,  3,  4,  7,  6, [pd_8192]   ; m0=t7[w], m3=t15[w]
 
-    ; r0=t0, r2=t1, r3=t2, r4=t3, r5=t4, m12=t5, m9=t6, m8=t7
-    ; m0=t8, m1=t9, m11=t10, m10=t11, m4=t12, m5=t13, m2=t14, m3=t15
+    ; r8=t0, r7=t1, r5=t2, r10=t3, r11=t4, m8|r4=t5, m1=t6, m0=t7
+    ; m10|r0=t8, m11|r15=t9, m13|r13=t10, m12|r2=t11, m14|r3=t12, m15|r12=t13, m2=t14, m3=t15
 
-    ; handle t8-15 first
-    VP9_UNPACK_MULSUB_2D_4X  0,  1,  6,  7, 16069,  3196    ; m1/7=t8[d], m0/6=t9[d]
-    VP9_UNPACK_MULSUB_2D_4X  5,  4, 13, 14,  3196, 16069    ; m5/13=t12[d], m4/14=t13[d]
-    VP9_RND_SH_SUMSUB_BA     5,  1, 13,  7, 15, [pd_8192]   ; m5=t8[w], m1=t12[w]
-    VP9_RND_SH_SUMSUB_BA     4,  0, 14,  6, 15, [pd_8192]   ; m4=t9[w], m0=t13[w]
+    UNSCRATCH            4, 12, tmpq+ 2*%%str
+    UNSCRATCH            5, 13, tmpq+13*%%str
+    SCRATCH              0, 12, tmpq+ 1*%%str
+    SCRATCH              1, 13, tmpq+14*%%str
 
-    VP9_UNPACK_MULSUB_2D_4X 11, 10,  6,  7,  9102, 13623    ; m11/6=t11[d], m10/7=t10[d]
-    VP9_UNPACK_MULSUB_2D_4X  3,  2, 13, 14, 13623,  9102    ; m3/13=t14[d], m2/14=t15[d]
-    VP9_RND_SH_SUMSUB_BA     3, 10, 13,  7, 15, [pd_8192]   ; m3=t10[w], m10=t14[w]
-    VP9_RND_SH_SUMSUB_BA     2, 11, 14,  6, 15, [pd_8192]   ; m2=t11[w], m11=t15[w]
+    ; remainder of round 2 (rest of t8-15)
+    VP9_UNPACK_MULSUB_2D_4X  5,  4,  6,  7,  9102, 13623    ; m5/6=t11[d], m4/7=t10[d]
+    VP9_UNPACK_MULSUB_2D_4X  3,  2,  1,  0, 13623,  9102    ; m3/1=t14[d], m2/0=t15[d]
+    SCRATCH              0, 9, tmpq+ 6*%%str
+    VP9_RND_SH_SUMSUB_BA     3,  4,  1,  7,  0, [pd_8192]   ; m3=t10[w], m4=t14[w]
+    UNSCRATCH            0, 9, tmpq+ 6*%%str
+    VP9_RND_SH_SUMSUB_BA     2,  5,  0,  6,  1, [pd_8192]   ; m2=t11[w], m5=t15[w]
 
-    ; m5=t8, m4=t9, m3=t10, m2=t11, m1=t12, m0=t13, m10=t14, m11=t15
+    ; m15|r12=t8, m14|r3=t9, m3=t10, m2=t11, m11|r15=t12, m10|r0=t13, m4=t14, m5=t15
 
-    VP9_UNPACK_MULSUB_2D_4X  1,  0,  6,  7, 15137,  6270    ; m1/6=t13[d], m0/7=t12[d]
-    VP9_UNPACK_MULSUB_2D_4X 11, 10, 13, 14,  6270, 15137    ; m11/13=t14[d], m10/14=t15[d]
-    VP9_RND_SH_SUMSUB_BA    11,  0, 13,  7, 15, [pd_8192]   ; m11=out2[w], m0=t14[w]
-    VP9_RND_SH_SUMSUB_BA    10,  1, 14,  6, 15, [pd_8192]
-    PSIGNW                 m10, [pw_m1]                     ; m10=out13[w], m1=t15[w]
+    UNSCRATCH            6, 14, tmpq+ 3*%%str
+    UNSCRATCH            7, 15, tmpq+12*%%str
 
-    SUMSUB_BA                w,  3,  5, 15
-    PSIGNW                  m3, [pw_m1]                     ; m3=out1[w], m5=t10[w]
-    SUMSUB_BA                w,  2,  4, 15                  ; m2=out14[w], m4=t11[w]
-
-%if cpuflag(ssse3)
-    SUMSUB_BA                w,  5,  4, 15
-    pmulhrsw                m5, [pw_11585x2]                ; m5=out6[w]
-    pmulhrsw                m4, [pw_11585x2]                ; m4=out9[w]
-    SUMSUB_BA                w,  1,  0, 15
-    pmulhrsw                m1, [pw_m11585x2]               ; m1=out5[w]
-    pmulhrsw                m0, [pw_11585x2]                ; m0=out10[w]
-%else
-    VP9_UNPACK_MULSUB_2W_4X  4,  5, 11585, 11585, [pd_8192], 7, 15
-    PSIGNW                  m1, [pw_m1]
-    VP9_UNPACK_MULSUB_2W_4X  1,  0, 11585, 11585, [pd_8192], 7, 15
-%endif
-
-    ; m3=out1, m11=out2, m1=out5, m5=out6, m4=out9, m0=out10, m10=out13, m2=out14
-
-    mova                    m6, [tmpq+ 0*%%str]
-    mova                    m7, [tmpq+ 2*%%str]
-    mova                   m13, [tmpq+ 3*%%str]
-    mova                   m14, [tmpq+ 4*%%str]
-    mova                   m15, [tmpq+ 5*%%str]
-    mova       [tmpq+ 8*%%str], m5
-    mova       [tmpq+ 9*%%str], m4
-    mova       [tmpq+10*%%str], m0
-    mova       [tmpq+11*%%str], m10
-    mova       [tmpq+12*%%str], m2
-
-    ; m6=t0, m7=t1, m13=t2, m14=t3, m15=t4, m12=t5, m9=t6, m8=t7
-    ; m3=out1, m11=out2, m1=out5, r8=out6, r9=out9, r10=out10, r11=out13, r12=out14
-
-    SUMSUB_BA                w, 15,  6,  0                  ; m15=t0[w], m6=t4[w]
-    SUMSUB_BA                w, 12,  7,  0                  ; m12=t1[w], m7=t5[w]
-    SUMSUB_BA                w,  9, 13,  0                  ; m9=t2[w], m13=t6[w]
-    SUMSUB_BA                w,  8, 14,  0                  ; m8=t3[w], m14=t7[w]
-
-    VP9_UNPACK_MULSUB_2D_4X  6,  7,  0,  2, 15137,  6270    ; m6/0=t5[d], m7/2=t4[d]
-    VP9_UNPACK_MULSUB_2D_4X 14, 13,  4,  5,  6270, 15137    ; m14/4=t6[d], m13/5=t7[d]
-    VP9_RND_SH_SUMSUB_BA    14,  7,  4,  2, 10, [pd_8192]
-    PSIGNW                 m14, [pw_m1]                     ; m14=out3[w], m7=t6[w]
-    VP9_RND_SH_SUMSUB_BA    13,  6,  5,  0, 10, [pd_8192]   ; m13=out12[w], m6=t7[w]
-    SUMSUB_BA                w,  9, 15, 10                  ; m9=out0[w], m15=t2[w]
-    SUMSUB_BA                w,  8, 12, 10
-    PSIGNW                  m8, [pw_m1]                     ; m8=out15[w], m12=t3[w]
+    SUMSUB_BA                w,  3,  7,  1
+    PSIGNW                  m3, [pw_m1]                     ; m3=out1[w], m7=t10[w]
+    SUMSUB_BA                w,  2,  6,  1                  ; m2=out14[w], m6=t11[w]
 
 %if cpuflag(ssse3)
-    SUMSUB_BA                w, 12, 15, 10
-    pmulhrsw               m12, [pw_m11585x2]               ; m12=out7[w]
-    pmulhrsw               m15, [pw_11585x2]                ; m15=out8[w]
-    SUMSUB_BA                w,  7,  6, 10
-    pmulhrsw                m7, [pw_11585x2]                ; m7=out4[w]
-    pmulhrsw                m6, [pw_11585x2]                ; m6=out11[w]
+    SUMSUB_BA                w,  7,  6,  1
+    pmulhrsw                m7, [pw_11585x2]                ; m7=out6[w]
+    pmulhrsw                m6, [pw_11585x2]                ; m6=out9[w]
 %else
-    PSIGNW                 m12, [pw_m1]
-    VP9_UNPACK_MULSUB_2W_4X 12, 15, 11585, 11585, [pd_8192], 0, 10
-    VP9_UNPACK_MULSUB_2W_4X  6,  7, 11585, 11585, [pd_8192], 0, 10
+    VP9_UNPACK_MULSUB_2W_4X  6,  7, 11585, 11585, [pd_8192], 1, 0
 %endif
 
-    ; m9=out0, m14=out3, m7=out4, m12=out7, m15=out8, m6=out11, m13=out12, m8=out15
-    ; m3=out1, m11=out2, m1=out5, r8=out6, r9=out9, r10=out10, r11=out13, r12=out14
+    mova       [tmpq+ 3*%%str], m6
+    mova       [tmpq+ 6*%%str], m7
+    UNSCRATCH                6, 10, tmpq+ 0*%%str
+    UNSCRATCH                7, 11, tmpq+15*%%str
+    mova       [tmpq+13*%%str], m2
+    SCRATCH                  3, 11, tmpq+ 9*%%str
+
+    VP9_UNPACK_MULSUB_2D_4X  7,  6,  2,  3, 15137,  6270    ; m6/3=t13[d], m7/2=t12[d]
+    VP9_UNPACK_MULSUB_2D_4X  5,  4,  1,  0,  6270, 15137    ; m5/1=t14[d], m4/0=t15[d]
+    SCRATCH              0, 9, tmpq+ 2*%%str
+    VP9_RND_SH_SUMSUB_BA     5,  6,  1,  3,  0, [pd_8192]   ; m5=out2[w], m6=t14[w]
+    UNSCRATCH            0, 9, tmpq+ 2*%%str
+    VP9_RND_SH_SUMSUB_BA     4,  7,  0,  2,  1, [pd_8192]
+    PSIGNW                  m4, [pw_m1]                     ; m4=out13[w], m7=t15[w]
+
+%if cpuflag(ssse3)
+    SUMSUB_BA                w,  7,  6,  1
+    pmulhrsw                m7, [pw_m11585x2]               ; m7=out5[w]
+    pmulhrsw                m6, [pw_11585x2]                ; m6=out10[w]
+%else
+    PSIGNW                  m7, [pw_m1]
+    VP9_UNPACK_MULSUB_2W_4X  7,  6, 11585, 11585, [pd_8192], 1, 0
+%endif
+
+    ; m11|r13=out1, m5=out2, m7=out5, r15=out6, r3=out9, m6=out10, m4=out13, r2=out14
+
+    mova                    m2, [tmpq+ 8*%%str]
+    mova                    m3, [tmpq+ 7*%%str]
+    mova                    m1, [tmpq+11*%%str]
+    mova       [tmpq+ 7*%%str], m6
+    mova       [tmpq+11*%%str], m4
+    mova                    m4, [tmpq+ 5*%%str]
+    SCRATCH                  5, 14, tmpq+ 5*%%str
+    SCRATCH                  7, 15, tmpq+ 8*%%str
+    UNSCRATCH                6,  8, tmpq+ 4*%%str
+    UNSCRATCH                5, 12, tmpq+ 1*%%str
+    UNSCRATCH                7, 13, tmpq+14*%%str
+
+    ; m2=t0, m3=t1, m9=t2, m0=t3, m1=t4, m8=t5, m13=t6, m12=t7
+    ; m11|r13=out1, m5=out2, m7=out5, r15=out6, r3=out9, r10=out10, r11=out13, r2=out14
+
+    SUMSUB_BA                w,  1,  2, 0                   ; m1=t0[w], m2=t4[w]
+    mova                    m0, [tmpq+10*%%str]
+    SCRATCH                  1, 12, tmpq+ 1*%%str
+    SUMSUB_BA                w,  6,  3, 1                   ; m8=t1[w], m3=t5[w]
+    SCRATCH                  6, 13, tmpq+ 4*%%str
+    SUMSUB_BA                w,  7,  4, 1                   ; m13=t2[w], m9=t6[w]
+    SCRATCH                  7,  8, tmpq+10*%%str
+    SUMSUB_BA                w,  5,  0, 1                   ; m12=t3[w], m0=t7[w]
+    SCRATCH                  5,  9, tmpq+14*%%str
+
+    VP9_UNPACK_MULSUB_2D_4X  2,  3,  7,  5, 15137,  6270    ; m2/6=t5[d], m3/10=t4[d]
+    VP9_UNPACK_MULSUB_2D_4X  0,  4,  1,  6,  6270, 15137    ; m0/14=t6[d], m9/15=t7[d]
+    SCRATCH                  6, 10, tmpq+ 0*%%str
+    VP9_RND_SH_SUMSUB_BA     0,  3,  1,  5,  6, [pd_8192]
+    UNSCRATCH                6, 10, tmpq+ 0*%%str
+    PSIGNW                  m0, [pw_m1]                     ; m0=out3[w], m3=t6[w]
+    VP9_RND_SH_SUMSUB_BA     4,  2,  6,  7,  5, [pd_8192]   ; m9=out12[w], m2=t7[w]
+
+    UNSCRATCH                1,  8, tmpq+10*%%str
+    UNSCRATCH                5,  9, tmpq+14*%%str
+    UNSCRATCH                6, 12, tmpq+ 1*%%str
+    UNSCRATCH                7, 13, tmpq+ 4*%%str
+    SCRATCH                  4,  9, tmpq+14*%%str
+
+    SUMSUB_BA                w,  1,  6,  4                  ; m13=out0[w], m1=t2[w]
+    SUMSUB_BA                w,  5,  7,  4
+    PSIGNW                  m5, [pw_m1]                     ; m12=out15[w], m8=t3[w]
+
+%if cpuflag(ssse3)
+    SUMSUB_BA               w,   7,  6,  4
+    pmulhrsw                m7, [pw_m11585x2]               ; m8=out7[w]
+    pmulhrsw                m6, [pw_11585x2]                ; m1=out8[w]
+    SUMSUB_BA                w,  3,  2,  4
+    pmulhrsw                m3, [pw_11585x2]                ; m3=out4[w]
+    pmulhrsw                m2, [pw_11585x2]                ; m2=out11[w]
+%else
+    SCRATCH                  5,  8, tmpq+10*%%str
+    PSIGNW                  m7, [pw_m1]
+    VP9_UNPACK_MULSUB_2W_4X  7,  6, 11585, 11585, [pd_8192],  5,  4
+    VP9_UNPACK_MULSUB_2W_4X  2,  3, 11585, 11585, [pd_8192],  5,  4
+    UNSCRATCH                5,  8, tmpq+10*%%str
+%endif
+
+    ; m13=out0, m0=out3, m3=out4, m8=out7, m1=out8, m2=out11, m9=out12, m12=out15
+    ; m11|r13=out1, m5=out2, m7=out5, r15=out6, r3=out9, r10=out10, r11=out13, r2=out14
 
 %if %2 == 1
-    mova                    m0, [tmpq+ 8*%%str]
-    TRANSPOSE8x8W            9, 3, 11, 14, 7, 1, 0, 12, 2
-    mova          [tmpq+ 0*16], m9
-    mova          [tmpq+ 2*16], m3
-    mova          [tmpq+ 4*16], m11
-    mova          [tmpq+ 6*16], m14
-    mova                    m9, [tmpq+ 9*%%str]
-    mova                    m3, [tmpq+10*%%str]
-    mova                   m11, [tmpq+11*%%str]
-    mova                   m14, [tmpq+12*%%str]
-    mova          [tmpq+ 8*16], m7
-    mova          [tmpq+10*16], m1
-    mova          [tmpq+12*16], m0
-    mova          [tmpq+14*16], m12
+%if ARCH_X86_64
+    mova                   m13, [tmpq+ 6*%%str]
+    TRANSPOSE8x8W            1, 11, 14, 0, 3, 15, 13, 7, 10
+    mova          [tmpq+ 0*16], m1
+    mova          [tmpq+ 2*16], m11
+    mova          [tmpq+ 4*16], m14
+    mova          [tmpq+ 6*16], m0
+    mova                    m1, [tmpq+ 3*%%str]
+    mova                   m11, [tmpq+ 7*%%str]
+    mova                   m14, [tmpq+11*%%str]
+    mova                    m0, [tmpq+13*%%str]
+    mova          [tmpq+ 8*16], m3
+    mova          [tmpq+10*16], m15
+    mova          [tmpq+12*16], m13
+    mova          [tmpq+14*16], m7
 
-    TRANSPOSE8x8W           15, 9, 3, 6, 13, 11, 14, 8, 2
-    mova          [tmpq+ 1*16], m15
-    mova          [tmpq+ 3*16], m9
-    mova          [tmpq+ 5*16], m3
-    mova          [tmpq+ 7*16], m6
-    mova          [tmpq+ 9*16], m13
-    mova          [tmpq+11*16], m11
-    mova          [tmpq+13*16], m14
-    mova          [tmpq+15*16], m8
+    TRANSPOSE8x8W            6, 1, 11, 2, 9, 14, 0, 5, 10
+    mova          [tmpq+ 1*16], m6
+    mova          [tmpq+ 3*16], m1
+    mova          [tmpq+ 5*16], m11
+    mova          [tmpq+ 7*16], m2
+    mova          [tmpq+ 9*16], m9
+    mova          [tmpq+11*16], m14
+    mova          [tmpq+13*16], m0
+    mova          [tmpq+15*16], m5
 %else
-    mova                    m5, [tmpq+ 8*%%str]
-    pxor                    m0, m0
+    mova       [tmpq+12*%%str], m2
+    mova       [tmpq+ 1*%%str], m5
+    mova       [tmpq+15*%%str], m6
+    mova                    m2, [tmpq+ 9*%%str]
+    mova                    m5, [tmpq+ 5*%%str]
+    mova                    m6, [tmpq+ 8*%%str]
+    TRANSPOSE8x8W            1, 2, 5, 0, 3, 6, 4, 7, [tmpq+ 6*%%str], [tmpq+ 8*%%str], 1
+    mova          [tmpq+ 0*16], m1
+    mova          [tmpq+ 2*16], m2
+    mova          [tmpq+ 4*16], m5
+    mova          [tmpq+ 6*16], m0
+    mova          [tmpq+10*16], m6
+    mova                    m3, [tmpq+12*%%str]
+    mova          [tmpq+12*16], m4
+    mova                    m4, [tmpq+14*%%str]
+    mova          [tmpq+14*16], m7
+
+    mova                    m0, [tmpq+15*%%str]
+    mova                    m1, [tmpq+ 3*%%str]
+    mova                    m2, [tmpq+ 7*%%str]
+    mova                    m5, [tmpq+11*%%str]
+    mova                    m7, [tmpq+ 1*%%str]
+    TRANSPOSE8x8W            0, 1, 2, 3, 4, 5, 6, 7, [tmpq+13*%%str], [tmpq+ 9*%%str], 1
+    mova          [tmpq+ 1*16], m0
+    mova          [tmpq+ 3*16], m1
+    mova          [tmpq+ 5*16], m2
+    mova          [tmpq+ 7*16], m3
+    mova          [tmpq+11*16], m5
+    mova          [tmpq+13*16], m6
+    mova          [tmpq+15*16], m7
+%endif
+%else
+    pxor                    m4, m4
 
 %if cpuflag(ssse3)
 %define ROUND_REG [pw_512]
@@ -1755,28 +1851,64 @@ VP9_IDCT_IDCT_16x16_ADD_XMM avx
 %define ROUND_REG [pw_32]
 %endif
 
-    VP9_IDCT8_WRITEx2        9,  3, 2, 4, 0, ROUND_REG, 6
+%if ARCH_X86_64
+    mova                   m12, [tmpq+ 6*%%str]
+    VP9_IDCT8_WRITEx2        1, 11, 10,  8,  4, ROUND_REG, 6
     lea                   dstq, [dstq+strideq*2]
-    VP9_IDCT8_WRITEx2       11, 14, 2, 4, 0, ROUND_REG, 6
+    VP9_IDCT8_WRITEx2       14,  0, 10,  8,  4, ROUND_REG, 6
     lea                   dstq, [dstq+strideq*2]
-    VP9_IDCT8_WRITEx2        7,  1, 2, 4, 0, ROUND_REG, 6
+    VP9_IDCT8_WRITEx2        3, 15, 10,  8,  4, ROUND_REG, 6
     lea                   dstq, [dstq+strideq*2]
-    VP9_IDCT8_WRITEx2        5, 12, 2, 4, 0, ROUND_REG, 6
+    VP9_IDCT8_WRITEx2       12,  7, 10,  8,  4, ROUND_REG, 6
     lea                   dstq, [dstq+strideq*2]
 
-    mova                    m9, [tmpq+ 9*%%str]
-    mova                    m3, [tmpq+10*%%str]
-    mova                   m11, [tmpq+11*%%str]
-    mova                   m14, [tmpq+12*%%str]
+    mova                    m1, [tmpq+ 3*%%str]
+    mova                   m11, [tmpq+ 7*%%str]
+    mova                   m14, [tmpq+11*%%str]
+    mova                    m0, [tmpq+13*%%str]
 
-    VP9_IDCT8_WRITEx2       15,  9, 2, 4, 0, ROUND_REG, 6
+    VP9_IDCT8_WRITEx2        6,  1, 10,  8,  4, ROUND_REG, 6
     lea                   dstq, [dstq+strideq*2]
-    VP9_IDCT8_WRITEx2        3,  6, 2, 4, 0, ROUND_REG, 6
+    VP9_IDCT8_WRITEx2       11,  2, 10,  8,  4, ROUND_REG, 6
     lea                   dstq, [dstq+strideq*2]
-    VP9_IDCT8_WRITEx2       13, 11, 2, 4, 0, ROUND_REG, 6
+    VP9_IDCT8_WRITEx2        9, 14, 10,  8,  4, ROUND_REG, 6
     lea                   dstq, [dstq+strideq*2]
-    VP9_IDCT8_WRITEx2       14,  8, 2, 4, 0, ROUND_REG, 6
+    VP9_IDCT8_WRITEx2        0,  5, 10,  8,  4, ROUND_REG, 6
+%else
+    mova       [tmpq+ 0*%%str], m2
+    mova       [tmpq+ 1*%%str], m5
+    mova       [tmpq+ 2*%%str], m6
+    mova                    m2, [tmpq+ 9*%%str]
+    VP9_IDCT8_WRITEx2        1,  2,  5,  6,  4, ROUND_REG, 6
+    lea                   dstq, [dstq+strideq*2]
+    mova                    m5, [tmpq+ 5*%%str]
+    VP9_IDCT8_WRITEx2        5,  0,  1,  2,  4, ROUND_REG, 6
+    lea                   dstq, [dstq+strideq*2]
+    mova                    m5, [tmpq+ 8*%%str]
+    VP9_IDCT8_WRITEx2        3,  5,  1,  2,  4, ROUND_REG, 6
+    lea                   dstq, [dstq+strideq*2]
+    mova                    m5, [tmpq+ 6*%%str]
+    VP9_IDCT8_WRITEx2        5,  7,  1,  2,  4, ROUND_REG, 6
+    lea                   dstq, [dstq+strideq*2]
 
+    mova                    m0, [tmpq+ 2*%%str]
+    mova                    m3, [tmpq+ 3*%%str]
+    VP9_IDCT8_WRITEx2        0,  3,  1,  2,  4, ROUND_REG, 6
+    lea                   dstq, [dstq+strideq*2]
+    mova                    m0, [tmpq+ 7*%%str]
+    mova                    m3, [tmpq+ 0*%%str]
+    VP9_IDCT8_WRITEx2        0,  3,  1,  2,  4, ROUND_REG, 6
+    lea                   dstq, [dstq+strideq*2]
+    mova                    m0, [tmpq+14*%%str]
+    mova                    m3, [tmpq+11*%%str]
+    VP9_IDCT8_WRITEx2        0,  3,  1,  2,  4, ROUND_REG, 6
+    lea                   dstq, [dstq+strideq*2]
+    mova                    m0, [tmpq+13*%%str]
+    mova                    m3, [tmpq+ 1*%%str]
+    VP9_IDCT8_WRITEx2        0,  3,  1,  2,  4, ROUND_REG, 6
+%endif
+
+    SWAP                     0,  4 ; zero
 %undef ROUND_REG
 %endif
 %endmacro
@@ -1822,6 +1954,8 @@ IADST16_FN idct,  IDCT16,  iadst, IADST16, avx
 IADST16_FN iadst, IADST16, idct,  IDCT16,  avx
 IADST16_FN iadst, IADST16, iadst, IADST16, avx
 %undef PSIGNW
+
+%if ARCH_X86_64 ; TODO: 32-bit? (32-bit limited to 8 xmm reg, we use more)
 
 ;---------------------------------------------------------------------------------------------
 ; void vp9_idct_idct_32x32_add_<opt>(uint8_t *dst, ptrdiff_t stride, int16_t *block, int eob);
