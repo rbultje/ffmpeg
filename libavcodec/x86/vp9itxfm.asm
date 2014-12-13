@@ -1934,8 +1934,8 @@ IADST16_FN iadst, IADST16, iadst, IADST16, avx
     pmulhrsw             m3,  m7, [pw_m5520x2] ;t19
     pmulhrsw             m7, [pw_15426x2] ;t28
 
-SWAP 4, 13
-SWAP 5, 12
+    SCRATCH               4, 13, tmpq+ 1*%%str
+    SCRATCH               5, 12, tmpq+15*%%str
 
     VP9_UNPACK_MULSUB_2W_4X   2,  6,  7,  3, 3196, m16069, [pd_8192], 4,  5 ; t18, t29
 %else
@@ -1958,8 +1958,8 @@ SWAP 5, 12
 
     VP9_UNPACK_MULSUB_2W_4X   5,  0, 16069,  3196, [pd_8192], 2, 3 ; t17, t30
 
-SWAP 4, 13
-SWAP 5, 12
+    SCRATCH               4, 13, tmpq+ 1*%%str
+    SCRATCH               5, 12, tmpq+15*%%str
 
     mova                 m2, [%1+ 7*64]
     mova                 m3, [%1+ 9*64]
@@ -1981,10 +1981,10 @@ SWAP 5, 12
     VP9_UNPACK_MULSUB_2W_4X   2,  6, 3196, m16069, [pd_8192], 4, 5 ; t18, t29
 %endif
 
-SWAP 5,12
+    UNSCRATCH             5, 12, tmpq+15*%%str
     SUMSUB_BA             w,  6,  0,  4
     mova    [tmpq+25*%%str], m6             ; t19
-SWAP 4,13
+    UNSCRATCH             4, 13, tmpq+ 1*%%str
     SUMSUB_BA             w,  7,  1,  6
     SUMSUB_BA             w,  3,  4,  6
     mova    [tmpq+23*%%str], m3             ; t16
@@ -1993,12 +1993,12 @@ SWAP 4,13
     VP9_UNPACK_MULSUB_2W_4X   0,  5, 15137,  6270, [pd_8192], 6, 3 ; t18, t29
     VP9_UNPACK_MULSUB_2W_4X   1,  4, 15137,  6270, [pd_8192], 6, 3 ; t19, t28
 
-SWAP 0,10
-SWAP 1,11
-SWAP 2,9
-SWAP 4,14
-SWAP 5,15
-SWAP 7,13
+    SCRATCH               0, 10, tmpq+ 1*%%str
+    SCRATCH               1, 11, tmpq+ 7*%%str
+    SCRATCH               2,  9, tmpq+ 9*%%str
+    SCRATCH               4, 14, tmpq+15*%%str
+    SCRATCH               5, 15, tmpq+17*%%str
+    SCRATCH               7, 13, tmpq+31*%%str
 
 %if %3 <= 8
     mova                 m0, [%1+ 5*64]
@@ -2012,8 +2012,8 @@ SWAP 7,13
     pmulhrsw             m6,  m3, [pw_m2404x2] ;t23
     pmulhrsw             m3, [pw_16207x2] ;t24
 
-SWAP 5,8
-SWAP 4,12
+    SCRATCH               5,  8, tmpq+ 5*%%str
+    SCRATCH               4, 12, tmpq+11*%%str
 
     VP9_UNPACK_MULSUB_2W_4X   7,  2,  3,  6, 13623, m9102, [pd_8192], 4, 5 ; t22, t25
 %else
@@ -2036,8 +2036,8 @@ SWAP 4,12
 
     VP9_UNPACK_MULSUB_2W_4X   1,  4,  9102, 13623, [pd_8192], 2, 3 ; t21, t26
 
-SWAP 5,8
-SWAP 4,12
+    SCRATCH               5,  8, tmpq+ 5*%%str
+    SCRATCH               4, 12, tmpq+11*%%str
 
     mova                 m7, [%1+ 3*64]
     mova                 m6, [%1+13*64]
@@ -2061,14 +2061,14 @@ SWAP 4,12
     ; m4=t16, m5=t17, m9=t18, m8=t19, m0=t20, m1=t21, m13=t22, m12=t23,
     ; m3=t24, m2=t25, m14=t26, m15=t27, m7=t28, m6=t29, m10=t30, m11=t31
 
-SWAP 4,12
+    UNSCRATCH             4, 12, tmpq+11*%%str
     SUMSUB_BA             w,  0,  6, 5
     SUMSUB_BA             w,  4,  2, 5
-SWAP 5,8
-SWAP 4,8
+    UNSCRATCH             5,  8, tmpq+ 5*%%str
+    SCRATCH               4,  8, tmpq+11*%%str
     SUMSUB_BA             w,  1,  7, 4
     SUMSUB_BA             w,  5,  3, 4
-SWAP 5,12
+    SCRATCH               5, 12, tmpq+ 5*%%str
 
     VP9_UNPACK_MULSUB_2W_4X   3,  6, 6270, m15137, [pd_8192], 4, 5 ; t20, t27
     VP9_UNPACK_MULSUB_2W_4X   2,  7, 6270, m15137, [pd_8192], 4, 5 ; t21, t26
@@ -2076,7 +2076,7 @@ SWAP 5,12
     ; m8[s]=t16, m9=t17, m5=t18, m4[s]=t19, m12=t20, m13=t21, m1=t22, m0=t23,
     ; m15=t24, m14=t25, m2=t26, m3=t27, m11=t28, m10=t29, m6=t30, m7=t31
 
-SWAP 5,9
+    UNSCRATCH             5,  9, tmpq+ 9*%%str
     mova                 m4, [tmpq+23*%%str] ; t16
 %if ARCH_X86_64
     SUMSUB_BA             w,  1,  5,  9
@@ -2084,10 +2084,10 @@ SWAP 5,9
 %else
     SUMSUB_BADC           w,  1,  5,  0,  4
 %endif
-    mova    [tmpq+ 5*%%str], m1     ; t17
-    mova    [tmpq+ 1*%%str], m0     ; t16
-SWAP 0,10
-SWAP 1,11
+    mova    [tmpq+29*%%str], m1     ; t17
+    mova    [tmpq+21*%%str], m0     ; t16
+    UNSCRATCH             0, 10, tmpq+ 1*%%str
+    UNSCRATCH             1, 11, tmpq+ 7*%%str
 %if ARCH_X86_64
     SUMSUB_BA             w,  2,  0,  9
     SUMSUB_BA             w,  3,  1,  9
@@ -2096,20 +2096,20 @@ SWAP 1,11
 %endif
     mova    [tmpq+ 9*%%str], m2     ; t18
     mova    [tmpq+13*%%str], m3     ; t19
-SWAP 0,10
-SWAP 1,11
+    SCRATCH               0, 10, tmpq+23*%%str
+    SCRATCH               1, 11, tmpq+27*%%str
 
-SWAP 2,14
-SWAP 3,15
+    UNSCRATCH             2, 14, tmpq+15*%%str
+    UNSCRATCH             3, 15, tmpq+17*%%str
     SUMSUB_BA             w,  6,  2, 0
     SUMSUB_BA             w,  7,  3, 0
-SWAP 6,14
-SWAP 7,15
+    SCRATCH               6, 14, tmpq+ 3*%%str
+    SCRATCH               7, 15, tmpq+ 7*%%str
 
-SWAP 0,8
+    UNSCRATCH             0,  8, tmpq+11*%%str
     mova                 m1, [tmpq+25*%%str] ; t19
-SWAP 6,12
-SWAP 7,13
+    UNSCRATCH             6, 12, tmpq+ 5*%%str
+    UNSCRATCH             7, 13, tmpq+31*%%str
 %if ARCH_X86_64
     SUMSUB_BA             w,  0,  1,  9
     SUMSUB_BA             w,  6,  7,  9
@@ -2133,10 +2133,10 @@ SWAP 7,13
     pmulhrsw             m1, [pw_11585x2]
     pmulhrsw             m5, [pw_11585x2]
 
-    mova    [tmpq+29*%%str], m7     ; t23
-SWAP 1,13
-SWAP 7,10
-SWAP 1,11
+    mova    [tmpq+ 5*%%str], m7     ; t23
+    SCRATCH               1, 13, tmpq+25*%%str
+    UNSCRATCH             7, 10, tmpq+23*%%str
+    UNSCRATCH             1, 11, tmpq+27*%%str
 
 %if ARCH_X86_64
     SUMSUB_BA             w,  7,  3, 10
@@ -2150,33 +2150,28 @@ SWAP 1,11
     pmulhrsw             m2, [pw_11585x2]
     pmulhrsw             m1, [pw_11585x2]
 %else
-SWAP 0,8
-SWAP 6,9
+    SCRATCH               0,  8, tmpq+15*%%str
+    SCRATCH               6,  9, tmpq+17*%%str
     VP9_UNPACK_MULSUB_2W_4X  7,  4, 11585, 11585, [pd_8192], 0, 6
-    mova    [tmpq+29*%%str], m7     ; t23
-SWAP 7,10
+    mova    [tmpq+ 5*%%str], m7     ; t23
+    UNSCRATCH             7, 10, tmpq+23*%%str
     VP9_UNPACK_MULSUB_2W_4X  1,  5, 11585, 11585, [pd_8192], 0, 6
-SWAP 1,13
-SWAP 1,11
+    SCRATCH               1, 13, tmpq+25*%%str
+    UNSCRATCH             1, 11, tmpq+27*%%str
     VP9_UNPACK_MULSUB_2W_4X  3,  7, 11585, 11585, [pd_8192], 0, 6
     VP9_UNPACK_MULSUB_2W_4X  2,  1, 11585, 11585, [pd_8192], 0, 6
-SWAP 0,8
-SWAP 6,9
+    UNSCRATCH             0,  8, tmpq+15*%%str
+    UNSCRATCH             6,  9, tmpq+17*%%str
 %endif
 
     ; m0=t16, m1=t17, m2=t18, m3=t19, m4=t20, m5=t21, m6=t22, m7=t23,
     ; m8=t24, m9=t25, m10=t26, m11=t27, m12=t28, m13=t29, m14=t30, m15=t31
 
-%if ARCH_X86_32
-..
-%endif
-
-; avail: 8,9,10,11,12
-
     ; then do final pass to sumsub+store the two halves
 %if %2 == 1
     mova    [tmpq+17*%%str], m2     ; t20
-    mova    [tmpq+21*%%str], m3     ; t21
+    mova    [tmpq+ 1*%%str], m3     ; t21
+%if ARCH_X86_64
     mova    [tmpq+25*%%str], m13    ; t22
 
     mova                 m8, [tmpq+ 0*%%str] ; t0
@@ -2227,17 +2222,17 @@ SWAP 6,9
     mova                m10, [tmpq+10*%%str] ; t13
     mova                 m9, [tmpq+ 6*%%str] ; t14
     mova                 m8, [tmpq+ 2*%%str] ; t15
-    mova                 m7, [tmpq+ 1*%%str] ; t16
-    mova                 m6, [tmpq+ 5*%%str] ; t17
+    mova                 m7, [tmpq+21*%%str] ; t16
+    mova                 m6, [tmpq+29*%%str] ; t17
     mova                 m5, [tmpq+ 9*%%str] ; t18
     mova                 m4, [tmpq+13*%%str] ; t19
     mova                 m3, [tmpq+17*%%str] ; t20
-    mova                 m2, [tmpq+21*%%str] ; t21
+    mova                 m2, [tmpq+ 1*%%str] ; t21
     mova                 m1, [tmpq+25*%%str] ; t22
 
     SUMSUB_BA             w,  7,  8, 0
     mova    [tmpq+ 2*%%str], m8
-    mova                 m0, [tmpq+29*%%str] ; t23
+    mova                 m0, [tmpq+ 5*%%str] ; t23
     SUMSUB_BA             w,  6,  9, 8
     SUMSUB_BA             w,  5, 10, 8
     SUMSUB_BA             w,  4, 11, 8
@@ -2267,12 +2262,131 @@ SWAP 6,9
     mova    [tmpq+26*%%str], m14
     mova    [tmpq+30*%%str], m15
 %else
+    mova                 m2, [tmpq+24*%%str] ; t6
+    mova                 m3, [tmpq+28*%%str] ; t7
+    SUMSUB_BADC           w,  5,  2,  4,  3
+    mova    [tmpq+24*%%str], m5
+    mova    [tmpq+23*%%str], m2
+    mova    [tmpq+28*%%str], m4
+    mova    [tmpq+19*%%str], m3
+
+    mova                 m2, [tmpq+16*%%str] ; t4
+    mova                 m3, [tmpq+20*%%str] ; t5
+    SUMSUB_BA             w,  1,  2,  5
+    SUMSUB_BA             w,  7,  3,  5
+    mova    [tmpq+15*%%str], m2
+    mova    [tmpq+11*%%str], m3
+
+    mova                 m2, [tmpq+ 0*%%str] ; t0
+    mova                 m3, [tmpq+ 4*%%str] ; t1
+    SUMSUB_BA             w,  6,  2,  5
+    SUMSUB_BA             w,  0,  3,  5
+    mova    [tmpq+31*%%str], m2
+    mova    [tmpq+27*%%str], m3
+
+    mova                 m2, [tmpq+ 8*%%str] ; t2
+    mova                 m3, [tmpq+12*%%str] ; t3
+    mova                 m5, [tmpq+ 7*%%str]
+    mova                 m4, [tmpq+ 3*%%str]
+    SUMSUB_BADC           w,  5,  2,  4,  3
+    mova    [tmpq+ 7*%%str], m2
+    mova    [tmpq+ 3*%%str], m3
+
+    mova                 m3, [tmpq+28*%%str]
+    TRANSPOSE8x8W         6, 0, 5, 4, 1, 7, 2, 3, [tmpq+24*%%str], [tmpq+16*%%str], 1
+    mova    [tmpq+ 0*%%str], m6
+    mova    [tmpq+ 4*%%str], m0
+    mova    [tmpq+ 8*%%str], m5
+    mova    [tmpq+12*%%str], m4
+    mova    [tmpq+20*%%str], m7
+    mova    [tmpq+24*%%str], m2
+    mova    [tmpq+28*%%str], m3
+
+    mova                 m6, [tmpq+19*%%str]
+    mova                 m0, [tmpq+23*%%str]
+    mova                 m5, [tmpq+11*%%str]
+    mova                 m4, [tmpq+15*%%str]
+    mova                 m1, [tmpq+ 3*%%str]
+    mova                 m7, [tmpq+ 7*%%str]
+    mova                 m3, [tmpq+31*%%str]
+    TRANSPOSE8x8W         6, 0, 5, 4, 1, 7, 2, 3, [tmpq+27*%%str], [tmpq+19*%%str], 1
+    mova    [tmpq+ 3*%%str], m6
+    mova    [tmpq+ 7*%%str], m0
+    mova    [tmpq+11*%%str], m5
+    mova    [tmpq+15*%%str], m4
+    mova    [tmpq+23*%%str], m7
+    mova    [tmpq+27*%%str], m2
+    mova    [tmpq+31*%%str], m3
+
+    mova                 m1, [tmpq+ 6*%%str] ; t14
+    mova                 m0, [tmpq+ 2*%%str] ; t15
+    mova                 m7, [tmpq+21*%%str] ; t16
+    mova                 m6, [tmpq+29*%%str] ; t17
+    SUMSUB_BA             w,  7,  0,  2
+    SUMSUB_BA             w,  6,  1,  2
+    mova    [tmpq+29*%%str], m7
+    mova    [tmpq+ 2*%%str], m0
+    mova    [tmpq+21*%%str], m6
+    mova    [tmpq+ 6*%%str], m1
+
+    mova                 m1, [tmpq+14*%%str] ; t12
+    mova                 m0, [tmpq+10*%%str] ; t13
+    mova                 m5, [tmpq+ 9*%%str] ; t18
+    mova                 m4, [tmpq+13*%%str] ; t19
+    SUMSUB_BA             w,  5,  0,  2
+    SUMSUB_BA             w,  4,  1,  2
+    mova     [tmpq+10*%%str], m0
+    mova     [tmpq+14*%%str], m1
+
+    mova                 m1, [tmpq+22*%%str] ; t10
+    mova                 m0, [tmpq+18*%%str] ; t11
+    mova                 m3, [tmpq+17*%%str] ; t20
+    mova                 m2, [tmpq+ 1*%%str] ; t21
+    SUMSUB_BA             w,  3,  0,  6
+    SUMSUB_BA             w,  2,  1,  6
+    mova     [tmpq+18*%%str], m0
+    mova     [tmpq+22*%%str], m1
+
+    mova                 m7, [tmpq+30*%%str] ; t8
+    mova                 m6, [tmpq+26*%%str] ; t9
+    mova                 m1, [tmpq+25*%%str] ; t22
+    mova                 m0, [tmpq+ 5*%%str] ; t23
+    SUMSUB_BADC           w,  1,  6,  0,  7
+    mova     [tmpq+26*%%str], m6
+    mova     [tmpq+30*%%str], m7
+
+    mova                 m7, [tmpq+29*%%str]
+    TRANSPOSE8x8W         0, 1, 2, 3, 4, 5, 6, 7, [tmpq+21*%%str], [tmpq+17*%%str], 1
+    mova    [tmpq+ 1*%%str], m0
+    mova    [tmpq+ 5*%%str], m1
+    mova    [tmpq+ 9*%%str], m2
+    mova    [tmpq+13*%%str], m3
+    mova    [tmpq+21*%%str], m5
+    mova    [tmpq+25*%%str], m6
+    mova    [tmpq+29*%%str], m7
+
+    mova    [tmpq+ 2*%%str], m0
+    mova    [tmpq+ 6*%%str], m1
+    mova    [tmpq+10*%%str], m2
+    mova    [tmpq+14*%%str], m3
+    mova    [tmpq+18*%%str], m4
+    mova    [tmpq+22*%%str], m5
+    mova    [tmpq+30*%%str], m7
+    TRANSPOSE8x8W         0, 1, 2, 3, 4, 5, 6, 7, [tmpq+26*%%str], [tmpq+18*%%str], 1
+    mova    [tmpq+ 2*%%str], m0
+    mova    [tmpq+ 6*%%str], m1
+    mova    [tmpq+10*%%str], m2
+    mova    [tmpq+14*%%str], m3
+    mova    [tmpq+22*%%str], m5
+    mova    [tmpq+26*%%str], m6
+    mova    [tmpq+30*%%str], m7
+%endif
+%else
     ; t0-7 is in [tmpq+{0,4,8,12,16,20,24,28}*%%str]
     ; t8-15 is in [tmpq+{2,6,10,14,18,22,26,30}*%%str]
     ; t16-19 and t23 is in [tmpq+{1,5,9,13,29}*%%str]
     ; t20-22 is in m4-6
     ; t24-31 is in m8-15
-    pxor               m10, m10
 
 %if cpuflag(ssse3)
 %define ROUND_REG [pw_512]
@@ -2292,6 +2406,9 @@ SWAP 6,9
     sub           dst_endq, stride2q
 %endif
 %endmacro
+
+%if ARCH_X86_64
+    pxor               m10, m10
 
     ; store t0-1 and t30-31
     mova                m8, [tmpq+ 0*%%str]
@@ -2316,7 +2433,7 @@ SWAP 6,9
     ; store t8-9 and t22-23
     mova                m8, [tmpq+30*%%str]
     mova                m9, [tmpq+26*%%str]
-    mova                m0, [tmpq+29*%%str]
+    mova                m0, [tmpq+ 5*%%str]
     %%STORE_2X2          8,  9, 13,  0, 12, 11, 10
 
     ; store t10-11 and t20-21
@@ -2334,10 +2451,72 @@ SWAP 6,9
     ; store t14-17
     mova                m8, [tmpq+ 6*%%str]
     mova                m9, [tmpq+ 2*%%str]
-    mova                m5, [tmpq+ 5*%%str]
-    mova                m4, [tmpq+ 1*%%str]
+    mova                m5, [tmpq+29*%%str]
+    mova                m4, [tmpq+21*%%str]
     %%STORE_2X2          8,  9,  4,  5, 12, 11, 10, 0
 
+    SWAP                 1, 10 ; zero
+%else
+    mova   [tmpq+ 1*%%str], m1
+    mova   [tmpq+11*%%str], m2
+    mova   [tmpq+15*%%str], m3
+    mova   [tmpq+17*%%str], m4
+    mova   [tmpq+19*%%str], m5
+    pxor                m1, m1
+
+    ; store t0-1 and t30-31
+    mova                m2, [tmpq+ 0*%%str]
+    mova                m3, [tmpq+ 4*%%str]
+    %%STORE_2X2          2,  3,  0,  6, 4, 5, 1
+
+    ; store t2-3 and t28-29
+    mova                m2, [tmpq+ 8*%%str]
+    mova                m3, [tmpq+12*%%str]
+    mova                m0, [tmpq+ 3*%%str]
+    mova                m6, [tmpq+ 7*%%str]
+    %%STORE_2X2          2,  3,  0,  6, 4, 5, 1
+
+    ; store t4-5 and t26-27
+    mova                m2, [tmpq+16*%%str]
+    mova                m3, [tmpq+20*%%str]
+    mova                m0, [tmpq+ 1*%%str]
+    %%STORE_2X2          2,  3,  7,  0, 4, 5, 1
+
+    ; store t6-7 and t24-25
+    mova                m2, [tmpq+24*%%str]
+    mova                m3, [tmpq+28*%%str]
+    mova                m0, [tmpq+17*%%str]
+    mova                m6, [tmpq+19*%%str]
+    %%STORE_2X2          2,  3,  0,  6, 4, 5, 1
+
+    ; store t8-9 and t22-23
+    mova                m2, [tmpq+30*%%str]
+    mova                m3, [tmpq+26*%%str]
+    mova                m0, [tmpq+25*%%str]
+    mova                m6, [tmpq+ 5*%%str]
+    %%STORE_2X2          2,  3,  0,  6, 4, 5, 1
+
+    ; store t10-11 and t20-21
+    mova                m2, [tmpq+22*%%str]
+    mova                m3, [tmpq+18*%%str]
+    mova                m0, [tmpq+11*%%str]
+    mova                m6, [tmpq+15*%%str]
+    %%STORE_2X2          2,  3,  0,  6, 4, 5, 1
+
+    ; store t12-13 and t18-19
+    mova                m2, [tmpq+14*%%str]
+    mova                m3, [tmpq+10*%%str]
+    mova                m0, [tmpq+13*%%str]
+    mova                m6, [tmpq+ 9*%%str]
+    %%STORE_2X2          2,  3,  0,  6, 4, 5, 1
+
+    ; store t14-17
+    mova                m2, [tmpq+ 6*%%str]
+    mova                m3, [tmpq+ 2*%%str]
+    mova                m0, [tmpq+29*%%str]
+    mova                m6, [tmpq+21*%%str]
+    %%STORE_2X2          2,  3,  0,  6, 4, 5, 1, 0
+%endif
 %undef ROUND_REG
 %endif
 %endmacro
@@ -2409,7 +2588,7 @@ cglobal vp9_idct_idct_32x32_add, 4, 9, 16, 2048, dst, stride, block, eob
 
     ; at the end of the loop, m7 should still be zero
     ; use that to zero out block coefficients
-    ZERO_BLOCK      blockq, 64,  8, m10
+    ZERO_BLOCK      blockq, 64,  8, m1
     RET
 
 .idct16x16:
@@ -2440,7 +2619,7 @@ cglobal vp9_idct_idct_32x32_add, 4, 9, 16, 2048, dst, stride, block, eob
 
     ; at the end of the loop, m7 should still be zero
     ; use that to zero out block coefficients
-    ZERO_BLOCK      blockq, 64, 16, m10
+    ZERO_BLOCK      blockq, 64, 16, m1
     RET
 %endif
 
@@ -2472,7 +2651,7 @@ cglobal vp9_idct_idct_32x32_add, 4, 9, 16, 2048, dst, stride, block, eob
 
     ; at the end of the loop, m7 should still be zero
     ; use that to zero out block coefficients
-    ZERO_BLOCK      blockq, 64, 32, m10
+    ZERO_BLOCK      blockq, 64, 32, m1
     RET
 %endmacro
 
