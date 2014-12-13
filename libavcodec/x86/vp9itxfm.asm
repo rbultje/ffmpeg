@@ -2523,7 +2523,7 @@ IADST16_FN iadst, IADST16, iadst, IADST16, avx
 
 %macro VP9_IDCT_IDCT_32x32_ADD_XMM 1
 INIT_XMM %1
-cglobal vp9_idct_idct_32x32_add, 4, 9, 16, 2048, dst, stride, block, eob
+cglobal vp9_idct_idct_32x32_add, 4, 7 + ARCH_X86_64 * 2, 16, 2048, dst, stride, block, eob
 %if cpuflag(ssse3) && ARCH_X86_64
     cmp eobd, 135
     jg .idctfull
@@ -2566,7 +2566,13 @@ cglobal vp9_idct_idct_32x32_add, 4, 9, 16, 2048, dst, stride, block, eob
     VP9_STORE_2XFULL    0, 1, 2, 3, 4, 5, mmsize
     RET
 
+%if ARCH_X86_64
     DEFINE_ARGS dst_bak, stride, block, cnt, dst, stride30, dst_end, stride2, tmp
+%else
+    DEFINE_ARGS dst, stride, block, stride30, dst_end, stride2, tmp
+%define cntd dword r4m
+%define dst_bakq r0mp
+%endif
 %if cpuflag(ssse3) && ARCH_X86_64
 .idct8x8:
     mov               tmpq, rsp
@@ -2579,7 +2585,7 @@ cglobal vp9_idct_idct_32x32_add, 4, 9, 16, 2048, dst, stride, block, eob
     sub          stride30q, stride2q        ; stride*30
 .loop2_8x8:
     mov               dstq, dst_bakq
-    lea           dst_endq, [dst_bakq+stride30q]
+    lea           dst_endq, [dstq+stride30q]
     VP9_IDCT32_1D     tmpq, 2, 8
     add           dst_bakq, 8
     add               tmpq, 16
@@ -2610,7 +2616,7 @@ cglobal vp9_idct_idct_32x32_add, 4, 9, 16, 2048, dst, stride, block, eob
     sub          stride30q, stride2q        ; stride*30
 .loop2_16x16:
     mov               dstq, dst_bakq
-    lea           dst_endq, [dst_bakq+stride30q]
+    lea           dst_endq, [dstq+stride30q]
     VP9_IDCT32_1D     tmpq, 2, 16
     add           dst_bakq, 8
     add               tmpq, 16
@@ -2642,7 +2648,7 @@ cglobal vp9_idct_idct_32x32_add, 4, 9, 16, 2048, dst, stride, block, eob
     sub          stride30q, stride2q        ; stride*30
 .loop2_full:
     mov               dstq, dst_bakq
-    lea           dst_endq, [dst_bakq+stride30q]
+    lea           dst_endq, [dstq+stride30q]
     VP9_IDCT32_1D     tmpq, 2
     add           dst_bakq, 8
     add               tmpq, 16
