@@ -1007,10 +1007,10 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
     ; m3=t8, m5=t9, m1=t10, m7=t11, m0=t12, m6=t13, m2=t14, m4=t15
 
     VP9_UNPACK_MULSUB_2W_4X 2, 5, 4, 3, 15137,  6270, [pd_8192], 1, 6 ; t9,  t14
-    SCRATCH              4, 10, %1+ 1*%3
-    SCRATCH              5, 11, %1+ 7*%3
+    SCRATCH              4, 10, %4+ 1*%5
+    SCRATCH              5, 11, %4+ 7*%5
     VP9_UNPACK_MULSUB_2W_4X 6, 1, 0, 7, 6270, m15137, [pd_8192], 4, 5 ; t10, t13
-    UNSCRATCH            5, 11, %1+ 7*%3
+    UNSCRATCH            5, 11, %4+ 7*%5
 
     ; m15=t0, m14=t1, m13=t2, m12=t3, m11=t4, m10=t5, m9=t6, m8=t7
     ; m7=t8, m6=t9, m2=t10, m3=t11, m4=t12, m5=t13, m1=t14, m0=t15
@@ -1038,8 +1038,8 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
 
     VP9_UNPACK_MULSUB_2W_4X   2,   5, 15137,  6270, [pd_8192], 0, 1 ; t9,  t14
 
-    SCRATCH              4, 10, %1+ 1*%3
-    SCRATCH              5, 11, %1+ 7*%3
+    SCRATCH              4, 10, %4+ 1*%5
+    SCRATCH              5, 11, %4+ 7*%5
 
     mova                m6, [%1+ 3*%3]      ; IN(3)
     mova                m7, [%1+ 5*%3]      ; IN(5)
@@ -1067,7 +1067,7 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
 
     VP9_UNPACK_MULSUB_2W_4X   6,   1, 6270, m15137, [pd_8192], 4, 5 ; t10, t13
 
-    UNSCRATCH            5, 11, %1+ 7*%3
+    UNSCRATCH            5, 11, %4+ 7*%5
 %endif
 
     ; m8=t0, m9=t1, m10=t2, m11=t3, m12=t4, m13=t5, m14=t6, m15=t7
@@ -1079,7 +1079,7 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
     mova        [%4+15*%5], m7
 
     SUMSUB_BA            w,  6,  2, 7       ; t9,  t10
-    UNSCRATCH            4, 10, %1+ 1*%3
+    UNSCRATCH            4, 10, %4+ 1*%5
     SUMSUB_BA            w,  0,  4, 7       ; t15, t12
     SUMSUB_BA            w,  1,  5, 7       ; t14. t13
 
@@ -1094,10 +1094,10 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
     pmulhrsw            m3, [pw_11585x2]    ; t12
     pmulhrsw            m2, [pw_11585x2]    ; t13
 %else
-    SCRATCH              6, 10, %1+ 1*%3
+    SCRATCH              6, 10, %4+ 1*%5
     VP9_UNPACK_MULSUB_2W_4X   5,   2, 11585, 11585, [pd_8192], 6, 7 ; t10, t13
     VP9_UNPACK_MULSUB_2W_4X   4,   3, 11585, 11585, [pd_8192], 6, 7 ; t11, t12
-    UNSCRATCH            6, 10, %1+ 1*%3
+    UNSCRATCH            6, 10, %4+ 1*%5
 %endif
 
     ; m15=t0, m14=t1, m13=t2, m12=t3, m11=t4, m10=t5, m9=t6, m8=t7
@@ -1132,6 +1132,9 @@ IADST8_FN iadst, IADST8, iadst, IADST8, avx
     psubw               m2, m3, m5
     paddw               m5, m3
 
+%if ARCH_X86_32
+    SWAP                 0, 7
+%endif
     SCRATCH              7, 15, %4+12*%5
 %else
     mova                m6, [%1+ 2*%3]      ; IN(2)
@@ -2365,13 +2368,13 @@ IADST16_FN iadst, IADST16, iadst, IADST16, avx
     mova    [tmpq+25*%%str], m6
     mova    [tmpq+29*%%str], m7
 
-    mova    [tmpq+ 2*%%str], m0
-    mova    [tmpq+ 6*%%str], m1
-    mova    [tmpq+10*%%str], m2
-    mova    [tmpq+14*%%str], m3
-    mova    [tmpq+18*%%str], m4
-    mova    [tmpq+22*%%str], m5
-    mova    [tmpq+30*%%str], m7
+    mova                 m0, [tmpq+ 2*%%str]
+    mova                 m1, [tmpq+ 6*%%str]
+    mova                 m2, [tmpq+10*%%str]
+    mova                 m3, [tmpq+14*%%str]
+    mova                 m4, [tmpq+18*%%str]
+    mova                 m5, [tmpq+22*%%str]
+    mova                 m7, [tmpq+30*%%str]
     TRANSPOSE8x8W         0, 1, 2, 3, 4, 5, 6, 7, [tmpq+26*%%str], [tmpq+18*%%str], 1
     mova    [tmpq+ 2*%%str], m0
     mova    [tmpq+ 6*%%str], m1
@@ -2506,15 +2509,15 @@ IADST16_FN iadst, IADST16, iadst, IADST16, avx
     ; store t12-13 and t18-19
     mova                m2, [tmpq+14*%%str]
     mova                m3, [tmpq+10*%%str]
-    mova                m0, [tmpq+13*%%str]
-    mova                m6, [tmpq+ 9*%%str]
+    mova                m6, [tmpq+13*%%str]
+    mova                m0, [tmpq+ 9*%%str]
     %%STORE_2X2          2,  3,  0,  6, 4, 5, 1
 
     ; store t14-17
     mova                m2, [tmpq+ 6*%%str]
     mova                m3, [tmpq+ 2*%%str]
-    mova                m0, [tmpq+29*%%str]
-    mova                m6, [tmpq+21*%%str]
+    mova                m6, [tmpq+29*%%str]
+    mova                m0, [tmpq+21*%%str]
     %%STORE_2X2          2,  3,  0,  6, 4, 5, 1, 0
 %endif
 %undef ROUND_REG
@@ -2524,7 +2527,7 @@ IADST16_FN iadst, IADST16, iadst, IADST16, avx
 %macro VP9_IDCT_IDCT_32x32_ADD_XMM 1
 INIT_XMM %1
 cglobal vp9_idct_idct_32x32_add, 4, 7 + ARCH_X86_64 * 2, 16, 2048, dst, stride, block, eob
-%if cpuflag(ssse3) && ARCH_X86_64
+%if cpuflag(ssse3)
     cmp eobd, 135
     jg .idctfull
     cmp eobd, 34
@@ -2573,7 +2576,7 @@ cglobal vp9_idct_idct_32x32_add, 4, 7 + ARCH_X86_64 * 2, 16, 2048, dst, stride, 
 %define cntd dword r4m
 %define dst_bakq r0mp
 %endif
-%if cpuflag(ssse3) && ARCH_X86_64
+%if cpuflag(ssse3)
 .idct8x8:
     mov               tmpq, rsp
     VP9_IDCT32_1D   blockq, 1, 8
