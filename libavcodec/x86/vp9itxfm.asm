@@ -623,9 +623,9 @@ IADST4_FN iadst, IADST4, iadst, IADST4, ssse3
 %undef ROUND_REG
 %endmacro
 
-%macro VP9_IDCT_IDCT_8x8_ADD_XMM 1
+%macro VP9_IDCT_IDCT_8x8_ADD_XMM 2
 INIT_XMM %1
-cglobal vp9_idct_idct_8x8_add, 4, 4, 12 + cpuflag(ssse3), dst, stride, block, eob
+cglobal vp9_idct_idct_8x8_add, 4, 4, %2, dst, stride, block, eob
 
 %if cpuflag(ssse3)
 %if ARCH_X86_64
@@ -794,9 +794,9 @@ cglobal vp9_idct_idct_8x8_add, 4, 4, 12 + cpuflag(ssse3), dst, stride, block, eo
 %undef W_11585x2_REG
 %endmacro
 
-VP9_IDCT_IDCT_8x8_ADD_XMM sse2
-VP9_IDCT_IDCT_8x8_ADD_XMM ssse3
-VP9_IDCT_IDCT_8x8_ADD_XMM avx
+VP9_IDCT_IDCT_8x8_ADD_XMM sse2, 12
+VP9_IDCT_IDCT_8x8_ADD_XMM ssse3, 13
+VP9_IDCT_IDCT_8x8_ADD_XMM avx, 13
 
 ;---------------------------------------------------------------------------------------------
 ; void vp9_iadst_iadst_8x8_add_<opt>(uint8_t *dst, ptrdiff_t stride, int16_t *block, int eob);
@@ -890,9 +890,9 @@ VP9_IDCT_IDCT_8x8_ADD_XMM avx
     SWAP                     7, 1, 5
 %endmacro
 
-%macro IADST8_FN 5
+%macro IADST8_FN 6
 INIT_XMM %5
-cglobal vp9_%1_%3_8x8_add, 3, 3, 15 + cpuflag(ssse3), dst, stride, block, eob
+cglobal vp9_%1_%3_8x8_add, 3, 3, %6, dst, stride, block, eob
 
 %ifidn %1, idct
 %define first_is_idct 1
@@ -966,16 +966,16 @@ cglobal vp9_%1_%3_8x8_add, 3, 3, 15 + cpuflag(ssse3), dst, stride, block, eob
 %endmacro
 
 %define PSIGNW PSIGNW_MMX
-IADST8_FN idct,  IDCT8,  iadst, IADST8, sse2
-IADST8_FN iadst, IADST8, idct,  IDCT8,  sse2
-IADST8_FN iadst, IADST8, iadst, IADST8, sse2
+IADST8_FN idct,  IDCT8,  iadst, IADST8, sse2, 15
+IADST8_FN iadst, IADST8, idct,  IDCT8,  sse2, 15
+IADST8_FN iadst, IADST8, iadst, IADST8, sse2, 15
 %define PSIGNW PSIGNW_SSSE3
-IADST8_FN idct,  IDCT8,  iadst, IADST8, ssse3
-IADST8_FN idct,  IDCT8,  iadst, IADST8, avx
-IADST8_FN iadst, IADST8, idct,  IDCT8,  ssse3
-IADST8_FN iadst, IADST8, idct,  IDCT8,  avx
-IADST8_FN iadst, IADST8, iadst, IADST8, ssse3
-IADST8_FN iadst, IADST8, iadst, IADST8, avx
+IADST8_FN idct,  IDCT8,  iadst, IADST8, ssse3, 16
+IADST8_FN idct,  IDCT8,  iadst, IADST8, avx, 16
+IADST8_FN iadst, IADST8, idct,  IDCT8,  ssse3, 16
+IADST8_FN iadst, IADST8, idct,  IDCT8,  avx, 16
+IADST8_FN iadst, IADST8, iadst, IADST8, ssse3, 16
+IADST8_FN iadst, IADST8, iadst, IADST8, avx, 16
 %undef PSIGNW
 
 ;---------------------------------------------------------------------------------------------
