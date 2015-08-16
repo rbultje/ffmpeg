@@ -91,7 +91,9 @@ static const AVClass av_codec_context_class = {
 
 int avcodec_get_context_defaults3(AVCodecContext *s, const AVCodec *codec)
 {
+#if FF_API_OLD_AVOPTIONS
     int flags=0;
+#endif
     memset(s, 0, sizeof(AVCodecContext));
 
     s->av_class = &av_codec_context_class;
@@ -102,6 +104,7 @@ int avcodec_get_context_defaults3(AVCodecContext *s, const AVCodec *codec)
         s->codec_id = codec->id;
     }
 
+#if FF_API_OLD_AVOPTIONS
     if(s->codec_type == AVMEDIA_TYPE_AUDIO)
         flags= AV_OPT_FLAG_AUDIO_PARAM;
     else if(s->codec_type == AVMEDIA_TYPE_VIDEO)
@@ -109,6 +112,9 @@ int avcodec_get_context_defaults3(AVCodecContext *s, const AVCodec *codec)
     else if(s->codec_type == AVMEDIA_TYPE_SUBTITLE)
         flags= AV_OPT_FLAG_SUBTITLE_PARAM;
     av_opt_set_defaults2(s, flags, flags);
+#else
+    av_opt_set_defaults(s);
+#endif
 
     s->time_base           = (AVRational){0,1};
     s->framerate           = (AVRational){ 0, 1 };
