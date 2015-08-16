@@ -249,8 +249,8 @@ static void evolve(AVFilterContext *ctx)
             v|= i+1 < cellauto->w ? prev_row[i+1]    : 0;
         }
         row[i] = !!(cellauto->rule & (1<<v));
-        av_dlog(ctx, "i:%d context:%c%c%c -> cell:%d\n", i,
-                v&4?'@':' ', v&2?'@':' ', v&1?'@':' ', row[i]);
+        av_log(ctx, AV_LOG_TRACE, "i:%d context:%c%c%c -> cell:%d\n", i,
+               v&4?'@':' ', v&2?'@':' ', v&1?'@':' ', row[i]);
     }
 
     cellauto->generation++;

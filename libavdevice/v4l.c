@@ -151,8 +151,8 @@ static int grab_read_header(AVFormatContext *s1, AVFormatParameters *ap)
     ioctl(video_fd, VIDIOCSAUDIO, &audio);
 
     ioctl(video_fd, VIDIOCGPICT, &pict);
-    av_dlog(s1, "v4l: colour=%d hue=%d brightness=%d constrast=%d whiteness=%d\n",
-            pict.colour, pict.hue, pict.brightness, pict.contrast, pict.whiteness);
+    av_log(s1, AV_LOG_TRACE, "v4l: colour=%d hue=%d brightness=%d constrast=%d whiteness=%d\n",
+           pict.colour, pict.hue, pict.brightness, pict.contrast, pict.whiteness);
     /* try to choose a suitable video format */
     pict.palette = desired_palette;
     pict.depth= desired_depth;

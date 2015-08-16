@@ -875,8 +875,8 @@ static AVFrame *apply_palette(AVFilterLink *inlink, AVFrame *in)
         return NULL;
     }
 
-    av_dlog(ctx, "%dx%d rect: (%d;%d) -> (%d,%d) [area:%dx%d]\n",
-            w, h, x, y, x+w, y+h, in->width, in->height);
+    av_log(ctx, AV_LOG_TRACE, "%dx%d rect: (%d;%d) -> (%d,%d) [area:%dx%d]\n",
+           w, h, x, y, x+w, y+h, in->width, in->height);
 
     if (s->set_frame(s, out, in, x, y, w, h) < 0) {
         av_frame_free(&out);

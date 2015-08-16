@@ -70,14 +70,14 @@ static int decode_frame_header(ProresContext *ctx, const uint8_t *buf,
     const uint8_t *ptr;
 
     hdr_size = AV_RB16(buf);
-    av_dlog(avctx, "header size %d\n", hdr_size);
+    av_log(avctx, AV_LOG_TRACE, "header size %d\n", hdr_size);
     if (hdr_size > data_size) {
         av_log(avctx, AV_LOG_ERROR, "error, wrong header size\n");
         return AVERROR_INVALIDDATA;
     }
 
     version = AV_RB16(buf + 2);
-    av_dlog(avctx, "%.4s version %d\n", buf+4, version);
+    av_log(avctx, AV_LOG_TRACE, "%.4s version %d\n", buf+4, version);
     if (version > 1) {
         av_log(avctx, AV_LOG_ERROR, "unsupported version: %d\n", version);
         return AVERROR_PATCHWELCOME;
@@ -100,7 +100,7 @@ static int decode_frame_header(ProresContext *ctx, const uint8_t *buf,
     }
     if (avctx->skip_alpha) ctx->alpha_info = 0;
 
-    av_dlog(avctx, "frame type %d\n", ctx->frame_type);
+    av_log(avctx, AV_LOG_TRACE, "frame type %d\n", ctx->frame_type);
 
     if (ctx->frame_type == 0) {
         ctx->scan = ctx->progressive_scan; // permuted
@@ -118,7 +118,7 @@ static int decode_frame_header(ProresContext *ctx, const uint8_t *buf,
 
     ptr   = buf + 20;
     flags = buf[19];
-    av_dlog(avctx, "flags %x\n", flags);
+    av_log(avctx, AV_LOG_TRACE, "flags %x\n", flags);
 
     if (flags & 2) {
         if(buf + data_size - ptr < 64) {

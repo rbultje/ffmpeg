@@ -168,7 +168,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpic)
 
 #ifdef DEBUG
     for (x = 0; x < 256; x++)
-        av_dlog(ctx, "in[%d]: %u\n", x, histeq->in_histogram[x]);
+        av_log(ctx, AV_LOG_TRACE, "in[%d]: %u\n", x, histeq->in_histogram[x]);
 #endif
 
     /* Calculate the lookup table. */
@@ -244,7 +244,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpic)
     }
 #ifdef DEBUG
     for (x = 0; x < 256; x++)
-        av_dlog(ctx, "out[%d]: %u\n", x, histeq->out_histogram[x]);
+        av_log(ctx, AV_LOG_TRACE, "out[%d]: %u\n", x, histeq->out_histogram[x]);
 #endif
 
     av_frame_free(&inpic);

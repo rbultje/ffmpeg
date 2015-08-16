@@ -536,8 +536,8 @@ static int movie_push_frame(AVFilterContext *ctx, unsigned out_id)
     }
 
     frame->pts = av_frame_get_best_effort_timestamp(frame);
-    av_dlog(ctx, "movie_push_frame(): file:'%s' %s\n", movie->file_name,
-            describe_frame_to_str((char[1024]){0}, 1024, frame, frame_type, outlink));
+    av_log(ctx, AV_LOG_TRACE, "movie_push_frame(): file:'%s' %s\n", movie->file_name,
+           describe_frame_to_str((char[1024]){0}, 1024, frame, frame_type, outlink));
 
     if (st->st->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
         if (frame->format != outlink->format) {

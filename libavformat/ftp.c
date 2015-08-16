@@ -266,7 +266,7 @@ static int ftp_passive_mode_epsv(FTPContext *s)
     end[-1] = '\0';
 
     s->server_data_port = atoi(start);
-    av_dlog(s, "Server data port: %d\n", s->server_data_port);
+    av_log(s, AV_LOG_TRACE, "Server data port: %d\n", s->server_data_port);
 
     av_free(res);
     return 0;
@@ -312,7 +312,7 @@ static int ftp_passive_mode(FTPContext *s)
     start = av_strtok(end, ",", &end);
     if (!start) goto fail;
     s->server_data_port += atoi(start);
-    av_dlog(s, "Server data port: %d\n", s->server_data_port);
+    av_log(s, AV_LOG_TRACE, "Server data port: %d\n", s->server_data_port);
 
     av_free(res);
     return 0;
@@ -579,7 +579,7 @@ static int ftp_open(URLContext *h, const char *url, int flags)
     size_t pathlen;
     FTPContext *s = h->priv_data;
 
-    av_dlog(h, "ftp protocol open\n");
+    av_log(h, AV_LOG_TRACE, "ftp protocol open\n");
 
     s->state = DISCONNECTED;
     s->filesize = -1;
@@ -642,7 +642,7 @@ static int64_t ftp_seek(URLContext *h, int64_t pos, int whence)
     int err;
     int64_t new_pos, fake_pos;
 
-    av_dlog(h, "ftp protocol seek %"PRId64" %d\n", pos, whence);
+    av_log(h, AV_LOG_TRACE, "ftp protocol seek %"PRId64" %d\n", pos, whence);
 
     switch(whence) {
     case AVSEEK_SIZE:
@@ -684,7 +684,7 @@ static int ftp_read(URLContext *h, unsigned char *buf, int size)
     FTPContext *s = h->priv_data;
     int read, err, retry_done = 0;
 
-    av_dlog(h, "ftp protocol read %d bytes\n", size);
+    av_log(h, AV_LOG_TRACE, "ftp protocol read %d bytes\n", size);
   retry:
     if (s->state == DISCONNECTED) {
         /* optimization */
@@ -742,7 +742,7 @@ static int ftp_write(URLContext *h, const unsigned char *buf, int size)
     FTPContext *s = h->priv_data;
     int written;
 
-    av_dlog(h, "ftp protocol write %d bytes\n", size);
+    av_log(h, AV_LOG_TRACE, "ftp protocol write %d bytes\n", size);
 
     if (s->state == DISCONNECTED) {
         if ((err = ftp_connect_data_connection(h)) < 0)
@@ -769,7 +769,7 @@ static int ftp_close(URLContext *h)
 {
     FTPContext *s = h->priv_data;
 
-    av_dlog(h, "ftp protocol close\n");
+    av_log(h, AV_LOG_TRACE, "ftp protocol close\n");
 
     ftp_close_both_connections(s);
     av_freep(&s->user);
@@ -784,7 +784,7 @@ static int ftp_get_file_handle(URLContext *h)
 {
     FTPContext *s = h->priv_data;
 
-    av_dlog(h, "ftp protocol get_file_handle\n");
+    av_log(h, AV_LOG_TRACE, "ftp protocol get_file_handle\n");
 
     if (s->conn_data)
         return ffurl_get_file_handle(s->conn_data);
@@ -796,7 +796,7 @@ static int ftp_shutdown(URLContext *h, int flags)
 {
     FTPContext *s = h->priv_data;
 
-    av_dlog(h, "ftp protocol shutdown\n");
+    av_log(h, AV_LOG_TRACE, "ftp protocol shutdown\n");
 
     if (s->conn_data)
         return ffurl_shutdown(s->conn_data, flags);
