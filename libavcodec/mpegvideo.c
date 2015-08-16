@@ -1502,6 +1502,7 @@ static void draw_line(uint8_t *buf, int sx, int sy, int ex, int ey,
     }
 }
 
+#if FF_API_DEBUG_MV
 /**
  * Draw an arrow from (ex, ey) -> (sx, sy).
  * @param w width of the image
@@ -1546,6 +1547,7 @@ static void draw_arrow(uint8_t *buf, int sx, int sy, int ex,
     }
     draw_line(buf, sx, sy, ex, ey, w, h, stride, color);
 }
+#endif
 #endif
 
 static int add_mb(AVMotionVector *mb, uint32_t mb_type,
@@ -1733,6 +1735,7 @@ void ff_print_debug_info2(AVCodecContext *avctx, AVFrame *pict, uint8_t *mbskip_
         }
     }
 
+#if FF_API_DEBUG_MV
     if ((avctx->debug & (FF_DEBUG_VIS_QP | FF_DEBUG_VIS_MB_TYPE)) ||
         (avctx->debug_mv)) {
         int mb_y;
@@ -1945,6 +1948,7 @@ void ff_print_debug_info2(AVCodecContext *avctx, AVFrame *pict, uint8_t *mbskip_
             }
         }
     }
+#endif
 }
 
 void ff_print_debug_info(MpegEncContext *s, Picture *p, AVFrame *pict)
