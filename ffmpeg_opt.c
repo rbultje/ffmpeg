@@ -3342,6 +3342,10 @@ const OptionDef options[] = {
         "force data codec ('copy' to copy stream)", "codec" },
     { "dn", OPT_BOOL | OPT_VIDEO | OPT_OFFSET | OPT_INPUT | OPT_OUTPUT, { .off = OFFSET(data_disable) },
         "disable data" },
+#if !FF_API_OLD_AVOPTIONS
+    { "ab",         OPT_AUDIO | HAS_ARG | OPT_OUTPUT, { .func_arg = opt_old2new },
+        "set bitrate (in bits/s)" },
+#endif
 
     { NULL, },
 };
