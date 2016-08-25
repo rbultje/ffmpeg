@@ -219,6 +219,7 @@ External library support:
   --disable-iconv          disable iconv [autodetect]
   --enable-jni             enable JNI support [no]
   --enable-ladspa          enable LADSPA audio filtering [no]
+  --enable-libaom            AV1 video encoding/decoding
   --enable-libass          enable libass subtitles rendering,
                            needed for subtitles and ass filter [no]
   --enable-libbluray       enable BluRay reading using libbluray [no]
@@ -1587,6 +1588,7 @@ EXTERNAL_LIBRARY_LIST="
     gnutls
     jni
     ladspa
+    libaom
     libass
     libbluray
     libbs2b
@@ -2920,6 +2922,7 @@ pcm_mulaw_at_encoder_select="audio_frame_queue"
 chromaprint_muxer_deps="chromaprint"
 h264_videotoolbox_encoder_deps="pthreads"
 h264_videotoolbox_encoder_select="videotoolbox_encoder"
+libaom_av1_decoder_deps="libaom"
 libcelt_decoder_deps="libcelt"
 libfdk_aac_decoder_deps="libfdk_aac"
 libfdk_aac_encoder_deps="libfdk_aac"
@@ -5938,6 +5941,12 @@ enabled gmp               && require gmp gmp.h mpz_export -lgmp
 enabled gnutls            && require_pkg_config gnutls gnutls gnutls/gnutls.h gnutls_global_init
 enabled jni               && { [ $target_os = "android" ] && check_header jni.h && enabled pthreads || die "ERROR: jni not found"; }
 enabled ladspa            && require_header ladspa.h
+enabled libaom && {
+    enabled libaom_av1_decoder && {
+            check_lib libaom_av1_decoder "aom/aom_decoder.h aom/aomdx.h" "aom_codec_av1_dx" -laom
+    }
+}
+#enabled libaom            && require_pkg_config "aom >= 0.1.0" aom/aom_codec.h aom_codec_version
 enabled libiec61883       && require libiec61883 libiec61883/iec61883.h iec61883_cmp_connect -lraw1394 -lavc1394 -lrom1394 -liec61883
 enabled libass            && require_pkg_config libass libass ass/ass.h ass_library_init
 enabled libbluray         && require_pkg_config libbluray libbluray libbluray/bluray.h bd_open
