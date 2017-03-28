@@ -1001,6 +1001,7 @@ SKIPHEADERS                            += %_tablegen.h                  \
                                           fft-internal.h                \
                                           tableprint.h                  \
                                           tableprint_vlc.h              \
+                                          vda_vt_internal.h             \
                                           aaccoder_twoloop.h            \
                                           aaccoder_trellis.h            \
                                           aacenc_quantization.h         \
@@ -1020,9 +1021,9 @@ SKIPHEADERS-$(CONFIG_QSVDEC)           += qsvdec.h
 SKIPHEADERS-$(CONFIG_QSVENC)           += qsvenc.h
 SKIPHEADERS-$(CONFIG_XVMC)             += xvmc.h
 SKIPHEADERS-$(CONFIG_VAAPI)            += vaapi_decode.h vaapi_encode.h
-SKIPHEADERS-$(CONFIG_VDA)              += vda.h vda_vt_internal.h
+SKIPHEADERS-$(CONFIG_VDA)              += vda.h
 SKIPHEADERS-$(CONFIG_VDPAU)            += vdpau.h vdpau_internal.h
-SKIPHEADERS-$(CONFIG_VIDEOTOOLBOX)     += videotoolbox.h vda_vt_internal.h
+SKIPHEADERS-$(CONFIG_VIDEOTOOLBOX)     += videotoolbox.h
 
 TESTPROGS = avpacket                                                    \
             celp_math                                                   \
