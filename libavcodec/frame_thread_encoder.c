@@ -251,6 +251,7 @@ int ff_thread_video_encode_frame(AVCodecContext *avctx, AVPacket *pkt, const AVF
     ThreadContext *c = avctx->internal->frame_thread_encoder;
     Task task;
     int ret;
+    unsigned idx;
 
     av_assert1(!*got_packet_ptr);
 
@@ -264,32 +265,33 @@ int ff_thread_video_encode_frame(AVCodecContext *avctx, AVPacket *pkt, const AVF
             return ret;
         }
 
-        task.index = c->task_index;
+        task.index = c->task_index % BUFFER_SIZE;
         task.indata = (void*)new;
         pthread_mutex_lock(&c->task_fifo_mutex);
         av_fifo_generic_write(c->task_fifo, &task, sizeof(task), NULL);
         pthread_cond_signal(&c->task_fifo_cond);
         pthread_mutex_unlock(&c->task_fifo_mutex);
 
-        c->task_index = (c->task_index+1) % BUFFER_SIZE;
+        c->task_index++;
 
-        if(!c->finished_tasks[c->finished_task_index].outdata && (c->task_index - c->finished_task_index) % BUFFER_SIZE <= avctx->thread_count)
+        if (c->task_index - c->finished_task_index < avctx->thread_count)
             return 0;
     }
 
     if(c->task_index == c->finished_task_index)
         return 0;
 
+    idx = c->finished_task_index % BUFFER_SIZE;
     pthread_mutex_lock(&c->finished_task_mutex);
-    while (!c->finished_tasks[c->finished_task_index].outdata) {
+    while (!c->finished_tasks[idx].outdata) {
         pthread_cond_wait(&c->finished_task_cond, &c->finished_task_mutex);
     }
-    task = c->finished_tasks[c->finished_task_index];
+    task = c->finished_tasks[idx];
     *pkt = *(AVPacket*)(task.outdata);
     if(pkt->data)
         *got_packet_ptr = 1;
-    av_freep(&c->finished_tasks[c->finished_task_index].outdata);
-    c->finished_task_index = (c->finished_task_index+1) % BUFFER_SIZE;
+    av_freep(&c->finished_tasks[idx].outdata);
+    c->finished_task_index++;
     pthread_mutex_unlock(&c->finished_task_mutex);
 
     return task.return_code;
