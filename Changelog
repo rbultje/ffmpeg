@@ -62,6 +62,7 @@ version 3.4:
 - Rockchip MPP hardware decoding
 - vmafmotion video filter
 - use MIME type "G726" for little-endian G.726, "AAL2-G726" for big-endian G.726
+- ADM video filter
 
 
 version 3.3:
